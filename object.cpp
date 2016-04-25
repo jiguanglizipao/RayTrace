@@ -4,46 +4,40 @@
 #include <cstdlib>
 #include <fstream>
 
-Object::Object(std::string fi, int _times)
-    :times(_times)
-{
-    if(fi == "")return;
-    readfile(fi);
-}
-
-bool Object::readfile(std::string filename, int _times)
+bool Object::readfile(std::string filename, float _times, Point3D _loc)
 {
     times = _times;
+    loc = _loc;
     polys.clear();
     points.clear();
-    FILE *fp = fopen(filename.c_str(), "r");                                                        //打开文件
-    if(!fp){                                                                                        //判断是否存在
+    FILE *fp = fopen(filename.c_str(), "r");
+    if(!fp){
         printf("Can't open %s", filename.c_str());
         return false;
     }
     char buf[512];
     char str[512];
     int lines = 0;
-    std::vector<std::vector<int> >face;                                                             //物体的面
+    std::vector<std::vector<int> >face;
     while(fscanf(fp, "%s", buf) != EOF)
     {
         lines++;
         switch(buf[0])
         {
-        case '#':				/* comment */                                                       //注释
+        case '#':				/* comment */
             /* eat up rest of line */
             fgets(buf, sizeof(buf), fp);
             break;
-        case 'v':				/* v, vn, vt */                                                     //顶点
+        case 'v':				/* v, vn, vt */
             switch(buf[1])
             {
             case '\0':			    /* vertex */
             {
                 Point3D v;
-                if(fscanf(fp, "%lf %lf %lf",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
                 {
                     v.x*=times, v.y*=times, v.z*=times;
-                    points.push_back(v);
+                    points.push_back(v+loc);
                 }
                 else
                 {
@@ -59,7 +53,7 @@ bool Object::readfile(std::string filename, int _times)
             }
             break;
 
-        case 'f':				/* face */                                                          //面
+        case 'f':				/* face */
         {
             std::vector<int> tmp;
             tmp.clear();
@@ -81,7 +75,7 @@ bool Object::readfile(std::string filename, int _times)
         }
     }
 
-    for(std::size_t i=0;i<face.size();i++)                                                          //将面与点信息写入类内
+    for(std::size_t i=0;i<face.size();i++)
     {
         if(face[i].size() < 3)
         {

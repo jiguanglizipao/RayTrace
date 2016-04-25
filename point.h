@@ -1,24 +1,24 @@
 #ifndef POINT_H
 #define POINT_H
 
-const float eps = 1e-10;
-struct Point3D                                                          //3维点对
+const float eps = 1e-7;
+struct Point3D
 {
     float x, y, z;
-    Point3D(double _x = 0.0, double _y = 0.0, double _z = 0.0)
+    Point3D(float _x = 0.0, float _y = 0.0, float _z = 0.0)
         :x(_x), y(_y), z(_z)
     {
     }
 };
 
-struct Point2D                                                          //2维点对          
+struct Point2D
 {
     float x, y;
     Point2D(float _x = 0.0, float _y = 0.0)
         :x(_x), y(_y)
     {
     }
-    int getQuadrant()                                                   //获得点的象限
+    int getQuadrant()
     {
         if(x>-eps && y>-eps)return 1;
         if(x<-eps && y>-eps)return 2;
@@ -27,11 +27,18 @@ struct Point2D                                                          //2维�
     }
 };
 
-Point2D operator-(const Point2D &x, const Point2D &y);                  //2维点（向量）相减
-Point2D operator+(const Point2D &x, const Point2D &y);                  //2维点（向量）相加
-Point2D operator*(const float &k, const Point2D &x);                   //向量数乘
-double operator*(const Point2D &x, const Point2D &y);                   //向量点乘
-double operator^(const Point2D &x, const Point2D &y);                   //向量叉乘模
-double operator|(const Point2D &x, const Point2D &y);                   //向量长度
+Point2D operator-(const Point2D &x, const Point2D &y);
+Point2D operator+(const Point2D &x, const Point2D &y);
+Point2D operator*(const float &k, const Point2D &x);
+float operator*(const Point2D &x, const Point2D &y);
+float operator^(const Point2D &x, const Point2D &y);
+float operator|(const Point2D &x, const Point2D &y);
+
+Point3D operator+(const Point3D &x, const Point3D &y);
+Point3D operator-(const Point3D &x, const Point3D &y);
+float operator*(const Point3D &x, const Point3D &y);
+Point3D operator*(const float &k, const Point3D &x);
+Point3D operator^(const Point3D &x, const Point3D &y);
+
 
 #endif
