@@ -4,15 +4,17 @@
 #include <cstdlib>
 #include <fstream>
 
-bool Object::readfile(std::string filename, float _times, Point3D _loc)
+bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D rotate)
 {
     times = _times;
     loc = _loc;
     polys.clear();
     points.clear();
+    rotate = M_PI/180*rotate;
+    Matrix t = Matrix::Rx(cos(rotate.x), sin(rotate.x))*Matrix::Ry(cos(rotate.y), sin(rotate.y))*Matrix::Rz(cos(rotate.z), sin(rotate.z));
     FILE *fp = fopen(filename.c_str(), "r");
     if(!fp){
-        printf("Can't open %s", filename.c_str());
+        printf("Can't open %s\n", filename.c_str());
         return false;
     }
     char buf[512];
@@ -34,9 +36,10 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc)
             case '\0':			    /* vertex */
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                 {
                     v.x*=times, v.y*=times, v.z*=times;
+                    v = t*v;
                     points.push_back(v+loc);
                 }
                 else

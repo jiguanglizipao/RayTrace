@@ -5,8 +5,8 @@
 
 struct Color
 {
-    float r, g, b;
-    Color(float _r = 0, float _g = 0, float _b = 0)
+    double r, g, b;
+    Color(double _r = 0, double _g = 0, double _b = 0)
         :r(_r), g(_g), b(_b)
     {
     }
@@ -15,12 +15,12 @@ struct Color
         return Color(r+x.r, g+x.g, b+x.b);
     }
 
-    Color operator* (const float &k)
+    Color operator* (const double &k)
     {
         return Color(k*r, k*g, k*b);
     }
 
-    float operator* (const Color &x)
+    double operator* (const Color &x)
     {
         return x.r*r+x.g*g+x.b*b;
     }
