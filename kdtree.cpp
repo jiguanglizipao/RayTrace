@@ -1,31 +1,106 @@
 #include "kdtree.h"
+#include <algorithm>
 using namespace std;
+
+bool KdTreeNode::check_aabb(Point3D view, Point3D ray)
+{
+    double s[3]={view.x, view.y, view.z}, v[3]={ray.x, ray.y, ray.z};
+    Point3D pos;
+    if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
+    for(int i=0;i<3;i++)
+    {
+        if (fabs(v[i]) > eps)
+        {
+            double t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
+            if (t > eps)
+            {
+                pos = view + t * ray;
+                double p[3]={pos.x, pos.y, pos.z};
+                if (mi[(i+1)%3]<p[(i+1)%3]+eps && p[(i+1)%3]<ma[(i+1)%3]+eps && mi[(i+2)%3]<p[(i+2)%3]+eps && p[(i+2)%3]<ma[(i+2)%3]+eps)return true;
+            }
+        }
+    }
+    return false;
+}
+
 
 KdTree::KdTree(const vector<Object> &a, int s)
     :l(NULL), r(NULL)
 {
     vector<KdTreeNode>pre;
-    for(size_t i=0;i<a.size();i++)for(size_t j=0;j<a[i].polys.size();j++)pre.push_back(KdTreeNode(a[i].polys[j], i, j));
-    create(pre, s);
+    vector<KdTreeTemp>com[3];
+    for(int i=0;i<3;i++)com[i].clear();
+    for(size_t i=0;i<a.size();i++)for(size_t j=0;j<a[i].polys.size();j++)
+    {
+        pre.push_back(KdTreeNode(a[i].polys[j], i, j));
+        for(int k=0;k<3;k++)
+        {
+            com[k].push_back(KdTreeTemp(pre.size()-1, true, pre.back().mi[k]));
+            com[k].push_back(KdTreeTemp(pre.size()-1, false, pre.back().ma[k]));
+        }
+    }
+    for(int i=0;i<3;i++)sort(com[i].begin(), com[i].end());
+    create(pre, com, s);
 }
 
-KdTree::KdTree(const vector<KdTreeNode> &a, int s)
+KdTree::KdTree(const vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s)
     :l(NULL), r(NULL)
 {
-    create(a, s);
+    create(a, com, s);
 }
 
-void KdTree::create(const vector<KdTreeNode> &pre, int s)
+void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp> *com, int s)
 {
     w = s;
+    aabb.init();
+    for(size_t i=0;i<pre.size();i++)aabb.update(pre[i]);
     if(pre.size() < 10)
     {
         node = pre;
         return;
     }
-    double mi=1e10, ma=-1e10;
-    for(size_t i=0;i<pre.size();i++)mi = min(mi, pre[i].mi[w]), ma = max(ma, pre[i].ma[w]);
-    split = (ma+mi)*0.5;
+
+//    int suml=0, summ=0, sumr=pre.size();
+//    double mi = 0.5*pre.size()+pow(max(suml, sumr), 2.0/3.0);
+//    split = com[w][0].x-eps;
+//    for(size_t i=0;i<com[w].size();)
+//    {
+//        double c = com[w][i].x;
+//        for(;i<com[w].size() && com[w][i].x<c+eps;i++)
+//        {
+//            if(com[w][i].in)summ++, sumr--;else suml++, summ--;
+//        }
+//        double t = 0.5*abs(suml-sumr)+pow(max(suml, sumr), 2.0/3.0)+summ;
+//        if(t < mi)mi = t, split = c;
+//    }
+
+//    vector<KdTreeNode> vl, vr;
+//    vector<KdTreeTemp> coml[3], comr[3];
+//    vector<pair<int, int> > flag;
+//    for(size_t i=0;i<pre.size();i++)
+//    {
+//        if(pre[i].ma[w] < split)
+//            vl.push_back(pre[i]), flag.push_back(make_pair(0, vl.size()-1));
+//        else if(pre[i].mi[w] > split)
+//            vr.push_back(pre[i]), flag.push_back(make_pair(1, vr.size()-1));
+//        else
+//            node.push_back(pre[i]), flag.push_back(make_pair(2, node.size()-1));
+//    }
+//    for(int i=0;i<3;i++)
+//    {
+//        coml[i].clear();comr[i].clear();
+//        for(size_t j=0;j<com[i].size();j++)
+//        {
+//            if(flag[com[i][j].pos].first == 0)
+//                coml[i].push_back(KdTreeTemp(flag[com[i][j].pos].second, com[i][j].in, com[i][j].x));
+//            if(flag[com[i][j].pos].first == 1)
+//                comr[i].push_back(KdTreeTemp(flag[com[i][j].pos].second, com[i][j].in, com[i][j].x));
+//        }
+//    }
+//    if(!vl.empty())l = new KdTree(vl, coml, (w+1)%3);
+//    if(!vr.empty())r = new KdTree(vr, comr, (w+1)%3);
+
+    split = (aabb.mi[w]+aabb.ma[w])*0.5;
     vector<KdTreeNode> vl, vr;
     vl.clear();vr.clear();node.clear();
     for(size_t i=0;i<pre.size();i++)
@@ -37,8 +112,8 @@ void KdTree::create(const vector<KdTreeNode> &pre, int s)
         else
             node.push_back(pre[i]);
     }
-    if(!vl.empty())l = new KdTree(vl, (w+1)%3);
-    if(!vr.empty())r = new KdTree(vr, (w+1)%3);
+    if(!vl.empty())l = new KdTree(vl, com, (w+1)%3);
+    if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
 }
 
 bool KdTree::check_node(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
@@ -59,6 +134,7 @@ bool KdTree::check_node(const std::vector<Object> &objs, Point3D view, Point3D r
 
 bool KdTree::check(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
 {
+    if(!aabb.check_aabb(view, ray))return false;
     double s[3]={view.x, view.y, view.z}, v[3]={ray.x, ray.y, ray.z};
     int no1, nv1;
     double dis1=1.1e10;dis = 1.1e10;

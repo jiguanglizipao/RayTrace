@@ -199,9 +199,9 @@ int main( int argc, char** argv )
     }
     printf("Save image to %s\n", "output.jpg");
     imwrite("output.jpg", image);
-    namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
-    imshow( "Display Image", image );
-    waitKey(0);
+//    namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
+//    imshow( "Display Image", image );
+//    waitKey(0);
 
     return 0;
 }
