@@ -10,24 +10,12 @@ struct Color
         :r(_r), g(_g), b(_b)
     {
     }
-    Color operator+ (const Color &x)
-    {
-        return Color(r+x.r, g+x.g, b+x.b);
-    }
-
-    Color operator* (const double &k)
-    {
-        return Color(k*r, k*g, k*b);
-    }
-
-    double operator* (const Color &x)
-    {
-        return x.r*r+x.g*g+x.b*b;
-    }
 };
 
 Color operator* (const Point3D &x, const Color &y);
-
+Color operator+ (const Color &x, const Color &y);
+Color operator* (const double &k, const Color &x);
+double operator* (const Color &x, const Color &y);
 struct Light
 {
     Point3D loc;

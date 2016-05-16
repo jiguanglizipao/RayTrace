@@ -10,6 +10,7 @@
 #include <ctime>
 #include <algorithm>
 #include <cmath>
+#include <mpi.h>
 #include "point.h"
 #include "polygon.h"
 #include "object.h"
@@ -102,9 +103,9 @@ Color Ilocal(Point3D view, Point3D pos, int no, int nv, bool in)
     return ans;
 }
 
-Color RayTracing(Point3D view, Point3D ray, double weight, bool in)
+Color RayTracing(Point3D view, Point3D ray, double weight, bool in, int snum)
 {
-    const double MinWeight = 1e-3;
+    const double MinWeight = 5e-4;
     if(weight < MinWeight) return Color(0.0, 0.0, 0.0);
     double dis;
     int no=-1, nv=-1;
@@ -117,92 +118,200 @@ Color RayTracing(Point3D view, Point3D ray, double weight, bool in)
     Point3D R = 2*(V*n)*n-V;
     Point3D delta = eps/sqrt(ray*ray)*ray;
     Color ans = Ilocal(view, p-delta, no, nv)+Ilocal(view, p+delta, no, nv, in);
-    Color Rcolor;
-    if(objs[no].Ks1*objs[no].Ks1 > eps)Rcolor = objs[no].Ks1*RayTracing(p-delta, R, weight*0.6, in);
-    ans = ans + Rcolor;
+    if(objs[no].Ks1*objs[no].Ks1 > eps)ans = ans + objs[no].Ks1*RayTracing(p-delta, R, weight*0.6, in, snum);
+    if(objs[no].Ks2*objs[no].Ks2 > eps)
+    {
+        for(int i=0;i<snum;i++)
+        {
+            Point3D K(1e-4*(rand()%10000), 1e-4*(rand()%10000), 1e-4*(rand()%10000));
+            if((K*objs[no].polys[nv].n)*(R*objs[no].polys[nv].n) < -eps)K = -1*K;
+            ans = ans + objs[no].Ks2*RayTracing(p-delta, K, weight*0.3/snum, in, snum);
+        }
+    }
     double cos1 = n*V, np = in?(17.0/10.0):(10.0/17.0);
-    if(1-1/(np*np)*(1-cos1*cos1) < eps)return ans;// = ans + 0.5*Rcolor;
+    if(1-1/(np*np)*(1-cos1*cos1) < eps)return weight*ans;// = ans + 0.5*Rcolor;
     double cos2 = sqrt(1-(1/(np*np)*(1-cos1*cos1)));
     Point3D T = -1/np*V+(cos1/np-cos2)*n;
-    if(objs[no].Kt1*objs[no].Kt1 > eps)ans = ans + objs[no].Kt1*RayTracing(p+delta, T, weight*0.4, !in);
-    return ans;
+    if(objs[no].Kt1*objs[no].Kt1 > eps)ans = ans + objs[no].Kt1*RayTracing(p+delta, T, weight*0.4, !in, snum);
+    if(objs[no].Kt2*objs[no].Kt2 > eps)
+    {
+        for(int i=0;i<snum;i++)
+        {
+            Point3D K(1e-4*(rand()%10000), 1e-4*(rand()%10000), 1e-4*(rand()%10000));
+            if((K*objs[no].polys[nv].n)*(T*objs[no].polys[nv].n) < -eps)K = -1*K;
+            ans = ans + objs[no].Kt2*RayTracing(p+delta, K, weight*0.2/snum, !in, snum);
+        }
+    }
+    return weight*ans;
 }
 
 int main( int argc, char** argv )
 {
-//    if(argc < 2)
-//    {
-//        printf("Usage %s inputFile\n", argv[0]);
-//        return 0;
-//    }
-    freopen("test.txt", "r", stdin);
+    MPI_Init(&argc, &argv);
+    double start = MPI_Wtime();
+    int myid, mpin;
+    MPI_Status status;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpin);
+    //if(argc < 2)
+    //{
+    //    if(!myid)printf("Usage %s inputFile\n", argv[0]);
+    //    return 0;
+    //}
+
+    //MPI_File fh;
+    //MPI_File_open(MPI_COMM_WORLD, "test.txt", MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+    FILE *fi = fopen("test.txt", "r");
 
     Mat image;
-    int n, m, sizex, sizey;
+    int n, m, sizex, sizey, vnum, snum;
     Point3D view, sc_tmp;
 
-    scanf("%d", &n);
-
+    //MPI_File_read_all(fh, &n, 1, MPI_INT, &status);
+    fscanf(fi, "%d", &n);
     for(int i=0;i<n;i++)
     {
         objs.push_back(Object());
-        string tmp;
-        cin>>tmp;
+        char buf[256];
+        fscanf(fi, "%s", buf);
         Point3D loc, rotate;
         double times;
-        scanf("%lf", &times);
-        scanf("%lf%lf%lf", &loc.x, &loc.y, &loc.z);
-        scanf("%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
-        scanf("%lf%lf%lf", &objs[i].Kds.x, &objs[i].Kds.y, &objs[i].Kds.z);
-        scanf("%lf%lf%lf", &objs[i].Ks.x, &objs[i].Ks.y, &objs[i].Ks.z);
-        scanf("%lf%lf%lf", &objs[i].Ks1.x, &objs[i].Ks1.y, &objs[i].Ks1.z);
-        scanf("%lf%lf%lf", &objs[i].Kdt.x, &objs[i].Kdt.y, &objs[i].Kdt.z);
-        scanf("%lf%lf%lf", &objs[i].Kt.x, &objs[i].Kt.y, &objs[i].Kt.z);
-        scanf("%lf%lf%lf", &objs[i].Kt1.x, &objs[i].Kt1.y, &objs[i].Kt1.z);
-        if(!objs[i].readfile(tmp, times, loc, rotate)) return 0;
+        //MPI_File_read_all(fh, &times, 1, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf", &times);
+        //MPI_File_read_all(fh, &loc.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
+        //MPI_File_read_all(fh, &rotate.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
+        //MPI_File_read_all(fh, &objs[i].Kds.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Kds.x, &objs[i].Kds.y, &objs[i].Kds.z);
+        //MPI_File_read_all(fh, &objs[i].Ks.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Ks.x, &objs[i].Ks.y, &objs[i].Ks.z);
+        //MPI_File_read_all(fh, &objs[i].Ks1.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Ks1.x, &objs[i].Ks1.y, &objs[i].Ks1.z);
+        //MPI_File_read_all(fh, &objs[i].Ks2.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Ks2.x, &objs[i].Ks2.y, &objs[i].Ks2.z);
+        //MPI_File_read_all(fh, &objs[i].Kdt.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Kdt.x, &objs[i].Kdt.y, &objs[i].Kdt.z);
+        //MPI_File_read_all(fh, &objs[i].Kt.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Kt.x, &objs[i].Kt.y, &objs[i].Kt.z);
+        //MPI_File_read_all(fh, &objs[i].Kt1.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Kt1.x, &objs[i].Kt1.y, &objs[i].Kt1.z);
+        //MPI_File_read_all(fh, &objs[i].Kt2.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &objs[i].Kt2.x, &objs[i].Kt2.y, &objs[i].Kt2.z);
+        if(!objs[i].readfile(string(buf), times, loc, rotate)) return 0;
     }
     kdtree = new KdTree(objs, 0);
 
-    scanf("%d", &m);
+    //MPI_File_read_all(fh, &m, 1, MPI_INT, &status);
+    fscanf(fi, "%d", &m);
     for(int i=0;i<m;i++)
     {
         Point3D loc;
         Color col;
-        scanf("%lf%lf%lf", &loc.x, &loc.y, &loc.z);
-        scanf("%lf%lf%lf", &col.r, &col.g, &col.b);
+        //MPI_File_read_all(fh, &loc.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
+        //MPI_File_read_all(fh, &col.r, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &col.r, &col.g, &col.b);
         lights.push_back(Light(loc, col));
     }
 
-    scanf("%lf%lf%lf", &view.x, &view.y, &view.z);
+    //MPI_File_read_all(fh, &view.x, 3, MPI_DOUBLE, &status);
+    fscanf(fi, "%lf%lf%lf", &view.x, &view.y, &view.z);
     vector<Point3D> sc;
     for(int i=0;i<3;i++)
     {
-        scanf("%lf%lf%lf", &sc_tmp.x, &sc_tmp.y, &sc_tmp.z);
+        //MPI_File_read_all(fh, &sc_tmp.x, 3, MPI_DOUBLE, &status);
+        fscanf(fi, "%lf%lf%lf", &sc_tmp.x, &sc_tmp.y, &sc_tmp.z);
         sc.push_back(sc_tmp);
     }
-    scanf("%d%d", &sizex, &sizey);
-
-    image.create(sizex, sizey, CV_8UC3);
-
+    //MPI_File_read_all(fh, &sizex, 1, MPI_INT, &status);
+    //MPI_File_read_all(fh, &sizey, 1, MPI_INT, &status);
+    //MPI_File_read_all(fh, &vnum, 1, MPI_INT, &status);
+    //MPI_File_read_all(fh, &snum, 1, MPI_INT, &status);
+    fscanf(fi, "%d%d%d%d", &sizex, &sizey, &vnum, &snum);vnum=1;
+    fclose(fi);
     Polygon screen(sc);
     Point2D Vy_2=(1.0/sizey)*screen.points2d[1], Vx_2=(1.0/sizex)*(screen.points2d[2]-screen.points2d[1]);
     Point3D Vx(Vx_2.x, Vx_2.y, 0), Vy(Vy_2.x, Vy_2.y, 0);
 
-    for(int i=0;i<sizex;i++)
+    int *spl = new int[mpin+1], per=sizex/mpin, res=sizex-mpin*per;
+    memset(spl, 0, sizeof(spl));
+    for(int i=mpin-1;i>=0;i--,res--)spl[i+1]=per+(res>0);
+    for(int i=1;i<=mpin;i++)spl[i]=spl[i-1]+spl[i];
+
+    vector<MPI_Request*> req;
+    vector<Color*> col;
+
+    printf("myid=%d start=%d end=%d\n", myid, spl[myid], spl[myid+1]);
+
+    for(int i=spl[myid];i<spl[myid+1];i++)
     {
+        printf("%d\n", i);
+        col.push_back(new Color[sizey]);
+        req.push_back(new MPI_Request[3*sizey]);
         #pragma omp parallel for schedule(dynamic)
         for(int j=0;j<sizey;j++)
         {
-            Point3D ray = screen.rotate_r*(i*Vx+j*Vy) - view;
-            drawPixel(image, i, j, RayTracing(view, ray, 1, false));
+            col.back()[j]=Color(0,0,0);
+            for(int k=0;k<vnum;k++)
+            {
+                double dx=double(rand()%100000)/100000-0.5, dy=double(rand()%100000)/100000-0.5;
+                dx=0, dy=0;
+                Point3D ray = screen.rotate_r*((i+dx)*Vx+(j+dy)*Vy) - view;
+                col.back()[j] = col.back()[j] + RayTracing(view, ray, 1, false, snum);
+            }
         }
     }
-    printf("Save image to %s\n", "output.jpg");
-    imwrite("output.jpg", image);
-//    namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
-//    imshow( "Display Image", image );
-//    waitKey(0);
-
+    for(int i=spl[myid];i<spl[myid+1];i++)
+    {
+        for(int j=0;j<sizey;j++)
+        {
+            MPI_Isend(&col[i-spl[myid]][j].r, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+0, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+0]);
+            MPI_Isend(&col[i-spl[myid]][j].g, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+1, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+1]);
+            MPI_Isend(&col[i-spl[myid]][j].b, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+2, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+2]);
+        }
+    }
+    printf("myid=%d Finish\n", myid);
+    if(!myid)
+    {
+        image.create(sizex, sizey, CV_8UC3);
+        for(int k=0;k<mpin;k++)
+        {
+            for(int i=spl[k];i<spl[k+1];i++)
+            {
+                for(int j=0;j<sizey;j++)
+                {
+                    Color tmp(0,0,0);
+                    MPI_Recv(&(tmp.r), 1, MPI_DOUBLE, k, (i*sizey+j)*3+0, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&(tmp.g), 1, MPI_DOUBLE, k, (i*sizey+j)*3+1, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&(tmp.b), 1, MPI_DOUBLE, k, (i*sizey+j)*3+2, MPI_COMM_WORLD, &status);
+                    drawPixel(image, i, j, 1.0/vnum*tmp);
+                }
+            }
+        }
+        printf("Save image to %s\n", "output.jpg");
+        imwrite("output.jpg", image);
+        if(!myid)printf("%lfs\n", MPI_Wtime()-start);
+        for(int i=0;i<req.size();i++)
+            for(int j=0;j<3*sizey;j++)
+                MPI_Wait(&req[i][j], &status);
+        namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
+        imshow( "Display Image", image );
+        waitKey(0);
+        MPI_Finalize(); 
+    }else
+    {
+        for(int i=0;i<req.size();i++)
+            for(int j=0;j<3*sizey;j++)
+                MPI_Wait(&req[i][j], &status);
+        MPI_Finalize(); 
+    }
+    for(int i=0;i<req.size();i++)
+    {
+       delete [] req[i];
+       delete [] col[i];
+    }
+    delete [] spl;
     return 0;
 }
 
