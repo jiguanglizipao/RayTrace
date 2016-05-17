@@ -19,6 +19,6 @@ endif()
 #    set(CMAKE_CXX_FLAGS "-g -fast -acc -Minfo -ta=tesla:cc35")
 #endif()
 
-add_executable(Raytrace raytrace.cpp polygon.cpp point.cpp object.cpp matrix.cpp light.cpp kdtree.cpp)
+add_executable(Raytrace raytrace.cpp point.cpp)
 target_link_libraries(Raytrace ${OpenCV_LIBS} ${MPI_LIBRARIES})
 

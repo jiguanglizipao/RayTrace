@@ -1,8 +1,8 @@
 #include <cv.h>
 #if CV_VERSION_MAJOR == 3
-    #include <opencv2/highgui.hpp>
+#include <opencv2/highgui.hpp>
 #else
-    #include <opencv/highgui.h>
+#include <opencv/highgui.h>
 #endif
 #include <iostream>
 #include <vector>
@@ -12,140 +12,107 @@
 #include <cmath>
 #include <mpi.h>
 #include "point.h"
-#include "polygon.h"
-#include "object.h"
-#include "kdtree.h"
-#include "light.h"
+//#include "polygon.h"
+//#include "obj.colt.h"
+//#include "kdtree.h"
+//#include "light.h"
 
 using namespace std;
 using namespace cv;
 
-vector<Object> objs;
-vector<Light> lights;
-KdTree *kdtree;
-
-void drawPixel(cv::Mat &image, int x, int y, Color color) {
-    Color ans = color;
-    if(ans.b > 1 || ans.r > 1 || ans.g > 1)
-        printf("%lf %lf %lf\n", ans.r, ans.g, ans.b);
-    ans.r = ans.r>1?1:ans.r;
-    ans.g = ans.g>1?1:ans.g;
-    ans.b = ans.b>1?1:ans.b;
-    image.at<cv::Vec3b>(x,y)[2] = int(ans.r*255);
-    image.at<cv::Vec3b>(x,y)[1] = int(ans.g*255);
-    image.at<cv::Vec3b>(x,y)[0] = int(ans.b*255);
-}
-
-bool CheckAll(Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
+inline double norm(double x)
 {
-    dis=1.1e10;
-    double raydis = sqrt(ray*ray);
-    for(size_t i=0;i<objs.size();i++)
-    {
-        for(size_t j=0;j<objs[i].polys.size();j++)
-        {
-            double k = -(objs[i].polys[j].d+objs[i].polys[j].n*view)/(objs[i].polys[j].n*ray);
-            if(k < eps)continue;
-            Point3D tmp = view+k*ray;
-            if(objs[i].polys[j].checkInside(tmp) == Polygon::inside)
-                if(k*raydis < dis)dis=k*raydis, no=i, nv=j, p=tmp;
-        }
-    }
-    return dis < 1e10;
+    return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
-Color Ilocal(Point3D view, Point3D pos, int no, int nv)
+void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
+    Point3D ans = color;
+    ans.x=norm(ans.x), ans.y=norm(ans.y), ans.z=norm(ans.z);
+    image.at<cv::Vec3b>(x,y)[2] = int(pow(ans.x, 1 / 2.2) * 255 + .5);
+    image.at<cv::Vec3b>(x,y)[1] = int(pow(ans.y, 1 / 2.2) * 255 + .5);
+    image.at<cv::Vec3b>(x,y)[0] = int(pow(ans.z, 1 / 2.2) * 255 + .5);
+}
+
+enum RType { DIFF, SPEC, REFR };	// material types, used in radiance()
+struct Sphere
 {
-    Color ans(0.0, 0.0, 0.0);
-    for(size_t i=0;i<lights.size();i++)
-    {
-        int no1, nv1;
-        Point3D p, L=lights[i].loc-pos, V=view-pos, tmp(0.0, 0.0, 0.0), n;
-        if(L*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
-        double dis;
-        kdtree->check(objs, pos, L, no1, nv1, p, dis);
-        //CheckAll(pos, L, no1, nv1, p, dis);
-        if(dis < sqrt(L*L))continue;
-
-        if((objs[no].polys[nv].n*view+objs[no].polys[nv].d)*(objs[no].polys[nv].n*lights[i].loc+objs[no].polys[nv].d) > 0)
-        {
-            tmp = tmp + 1.0/sqrt(L*L)*L*n*objs[no].Kds;
-            tmp = tmp + pow(1/sqrt((L+V)*(L+V))*(L+V)*n, 30)*objs[no].Ks;
-        }
-        ans = ans+tmp*lights[i].col;
+    double rad;
+    Point3D pos, lig, col;
+    RType type;
+    Sphere(double rad_, Point3D pos_, Point3D lig_, Point3D col_, RType type_)
+        :rad(rad_), pos(pos_), lig(lig_), col(col_), type(type_) {
     }
-    return ans;
-}
+    double intersect(const Ray & r) const
+    {
+        Point3D op = pos - r.o;
+        double t, b = op * r.d, det = b * b - op * op + rad * rad;
+        if (det < 0)
+            return 0;
+        else
+            det = sqrt(det);
+        return (t = b - det) > eps ? t : ((t = b + det) > eps ? t : 0);
+    }
+};
+Sphere spheres[] = {		//Scene: radius, position, emission, color, material
+                            Sphere(1e5, Point3D(1e5 + 1, 40.8, 81.6), Point3D(), Point3D(.75, .25, .25), DIFF),	//Left
+                            Sphere(1e5, Point3D(-1e5 + 99, 40.8, 81.6), Point3D(), Point3D(.25, .25, .75), DIFF),	//Rght
+                            Sphere(1e5, Point3D(50, 40.8, 1e5), Point3D(), Point3D(.75, .75, .75), DIFF),	//Back
+                            Sphere(1e5, Point3D(50, 40.8, -1e5 + 170), Point3D(), Point3D(.25, .75, .25), DIFF),	//Frnt
+                            Sphere(1e5, Point3D(50, 1e5, 81.6), Point3D(), Point3D(.75, .75, .75), DIFF),	//Botm
+                            Sphere(1e5, Point3D(50, -1e5 + 81.6, 81.6), Point3D(), Point3D(.75, .75, .75), DIFF),	//Top
+                            Sphere(16.5, Point3D(27, 16.5, 47), Point3D(), Point3D(1, 1, 1) * .999, SPEC),	//Mirr
+                            Sphere(16.5, Point3D(73, 16.5, 78), Point3D(), Point3D(1, 1, 1) * .999, REFR),	//Glas
+                            Sphere(600, Point3D(50, 681.6 - .27, 81.6), Point3D(3, 3, 3), Point3D(), DIFF)	//Lite
+                   };
 
-Color Ilocal(Point3D view, Point3D pos, int no, int nv, bool in)
+inline bool intersect(const Ray & r, double &t, int &id)
 {
-    Color ans(0.0, 0.0, 0.0);
-    for(size_t i=0;i<lights.size();i++)
-    {
-        int no1, nv1;
-        Point3D p, L=lights[i].loc-pos, V=view-pos, tmp(0.0, 0.0, 0.0), n;
-        if(L*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
-        double dis, n1=10, n2=17;
-        if(!in)swap(n1, n2);
-        kdtree->check(objs, pos, L, no1, nv1, p, dis);
-        //CheckAll(pos, L, no1, nv1, p, dis);
-        if(dis < sqrt(L*L))continue;
-        V = (1.0/sqrt(V*V))*V;
-
-        if((objs[no].polys[nv].n*view+objs[no].polys[nv].d)*(objs[no].polys[nv].n*lights[i].loc+objs[no].polys[nv].d) < 0)
+    double n = sizeof(spheres) / sizeof(Sphere), d, inf = t = 1e20;
+    for (int i = int (n); i--;)
+        if ((d = spheres[i].intersect(r)) && d < t)
         {
-            if(!in && asin(n2/n1) < acos(V*n))continue;
-            tmp = tmp - 1.0/sqrt(L*L)*L*n*objs[no].Kdt;
-            tmp = tmp + pow((n1-n2)/fabs(n1-n2)/sqrt((n2*L+n1*V)*(n2*L+n1*V))*(n2*L+n1*V)*n, 30)*objs[no].Kt;
+            t = d;
+            id = i;
         }
-        ans = ans+tmp*lights[i].col;
-    }
-    return ans;
+    return t < inf;
 }
 
-Color RayTracing(Point3D view, Point3D ray, double weight, bool in, int snum)
+Point3D radiance(const Ray & r, int depth, bool into)
 {
-    const double MinWeight = 5e-4;
-    if(weight < MinWeight) return Color(0.0, 0.0, 0.0);
-    double dis;
-    int no=-1, nv=-1;
-    Point3D p, n;
-    if(!kdtree->check(objs, view, ray, no, nv, p, dis))return Color(0.0, 0.0, 0.0);
-    //if(!CheckAll(view, ray, no, nv, p, dis))return Color(0.0, 0.0, 0.0);
-    Point3D V = view-p;V = (1.0/sqrt(V*V))*V;
-    if(V*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
+    double t;		// distance to intersection
+    int id = 0;		// id of intersected obj.colt
+    if (!intersect(r, t, id))return Point3D();	// if miss, return black
 
-    Point3D R = 2*(V*n)*n-V;
-    Point3D delta = eps/sqrt(ray*ray)*ray;
-    Color ans = Ilocal(view, p-delta, no, nv)+Ilocal(view, p+delta, no, nv, in);
-    if(objs[no].Ks1*objs[no].Ks1 > eps)ans = ans + objs[no].Ks1*RayTracing(p-delta, R, weight*0.6, in, snum);
-    if(objs[no].Ks2*objs[no].Ks2 > eps)
+    const Sphere & obj = spheres[id];	// the hit obj.colt
+    Point3D x = r.o + r.d * t, n = (x - obj.pos).norm(), nl = (n*r.d) < 0 ? n : n * -1, f = obj.col;
+    double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
+    if (++depth > 5)
+        if (drand48() < p)
+            f = f * (1 / p);
+        else
+            return obj.lig;
+
+    if (obj.type == DIFF)
     {
-        for(int i=0;i<snum;i++)
-        {
-            Point3D K(1e-4*(rand()%10000), 1e-4*(rand()%10000), 1e-4*(rand()%10000));
-            if((K*objs[no].polys[nv].n)*(R*objs[no].polys[nv].n) < -eps)K = -1*K;
-            ans = ans + objs[no].Ks2*RayTracing(p-delta, K, weight*0.3/snum, in, snum);
-        }
-    }
-    double cos1 = n*V, np = in?(17.0/10.0):(10.0/17.0);
-    if(1-1/(np*np)*(1-cos1*cos1) < eps)return weight*ans;// = ans + 0.5*Rcolor;
-    double cos2 = sqrt(1-(1/(np*np)*(1-cos1*cos1)));
-    Point3D T = -1/np*V+(cos1/np-cos2)*n;
-    if(objs[no].Kt1*objs[no].Kt1 > eps)ans = ans + objs[no].Kt1*RayTracing(p+delta, T, weight*0.4, !in, snum);
-    if(objs[no].Kt2*objs[no].Kt2 > eps)
-    {
-        for(int i=0;i<snum;i++)
-        {
-            Point3D K(1e-4*(rand()%10000), 1e-4*(rand()%10000), 1e-4*(rand()%10000));
-            if((K*objs[no].polys[nv].n)*(T*objs[no].polys[nv].n) < -eps)K = -1*K;
-            ans = ans + objs[no].Kt2*RayTracing(p+delta, K, weight*0.2/snum, !in, snum);
-        }
-    }
-    return weight*ans;
+        double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
+        Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
+        Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+        return obj.lig + f.mult(radiance(Ray(x, d), depth, into));
+    } else if (obj.type == SPEC)	// Ideal SPECULAR reflection
+        return obj.lig + f.mult(radiance(Ray(x, r.d - n * 2 * (n*r.d)), depth, into));
+
+    Ray reflRay(x, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
+    double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+    if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+        return obj.lig + f.mult(radiance(reflRay, depth, into));
+    Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : (tdir*n));
+    double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+    return obj.lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x, tdir), depth, !into) * TP) :
+                                        radiance(reflRay, depth, into) * Re + radiance(Ray(x, tdir), depth, !into) * Tr);
 }
 
-int main( int argc, char** argv )
+int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
     double start = MPI_Wtime();
@@ -153,86 +120,10 @@ int main( int argc, char** argv )
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Comm_size(MPI_COMM_WORLD, &mpin);
-    //if(argc < 2)
-    //{
-    //    if(!myid)printf("Usage %s inputFile\n", argv[0]);
-    //    return 0;
-    //}
 
-    //MPI_File fh;
-    //MPI_File_open(MPI_COMM_WORLD, "test.txt", MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-    FILE *fi = fopen("test.txt", "r");
-
-    Mat image;
-    int n, m, sizex, sizey, vnum, snum;
-    Point3D view, sc_tmp;
-
-    //MPI_File_read_all(fh, &n, 1, MPI_INT, &status);
-    fscanf(fi, "%d", &n);
-    for(int i=0;i<n;i++)
-    {
-        objs.push_back(Object());
-        char buf[256];
-        fscanf(fi, "%s", buf);
-        Point3D loc, rotate;
-        double times;
-        //MPI_File_read_all(fh, &times, 1, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf", &times);
-        //MPI_File_read_all(fh, &loc.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
-        //MPI_File_read_all(fh, &rotate.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
-        //MPI_File_read_all(fh, &objs[i].Kds.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kds.x, &objs[i].Kds.y, &objs[i].Kds.z);
-        //MPI_File_read_all(fh, &objs[i].Ks.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks.x, &objs[i].Ks.y, &objs[i].Ks.z);
-        //MPI_File_read_all(fh, &objs[i].Ks1.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks1.x, &objs[i].Ks1.y, &objs[i].Ks1.z);
-        //MPI_File_read_all(fh, &objs[i].Ks2.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks2.x, &objs[i].Ks2.y, &objs[i].Ks2.z);
-        //MPI_File_read_all(fh, &objs[i].Kdt.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kdt.x, &objs[i].Kdt.y, &objs[i].Kdt.z);
-        //MPI_File_read_all(fh, &objs[i].Kt.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt.x, &objs[i].Kt.y, &objs[i].Kt.z);
-        //MPI_File_read_all(fh, &objs[i].Kt1.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt1.x, &objs[i].Kt1.y, &objs[i].Kt1.z);
-        //MPI_File_read_all(fh, &objs[i].Kt2.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt2.x, &objs[i].Kt2.y, &objs[i].Kt2.z);
-        if(!objs[i].readfile(string(buf), times, loc, rotate)) return 0;
-    }
-    kdtree = new KdTree(objs, 0);
-
-    //MPI_File_read_all(fh, &m, 1, MPI_INT, &status);
-    fscanf(fi, "%d", &m);
-    for(int i=0;i<m;i++)
-    {
-        Point3D loc;
-        Color col;
-        //MPI_File_read_all(fh, &loc.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
-        //MPI_File_read_all(fh, &col.r, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &col.r, &col.g, &col.b);
-        lights.push_back(Light(loc, col));
-    }
-
-    //MPI_File_read_all(fh, &view.x, 3, MPI_DOUBLE, &status);
-    fscanf(fi, "%lf%lf%lf", &view.x, &view.y, &view.z);
-    vector<Point3D> sc;
-    for(int i=0;i<3;i++)
-    {
-        //MPI_File_read_all(fh, &sc_tmp.x, 3, MPI_DOUBLE, &status);
-        fscanf(fi, "%lf%lf%lf", &sc_tmp.x, &sc_tmp.y, &sc_tmp.z);
-        sc.push_back(sc_tmp);
-    }
-    //MPI_File_read_all(fh, &sizex, 1, MPI_INT, &status);
-    //MPI_File_read_all(fh, &sizey, 1, MPI_INT, &status);
-    //MPI_File_read_all(fh, &vnum, 1, MPI_INT, &status);
-    //MPI_File_read_all(fh, &snum, 1, MPI_INT, &status);
-    fscanf(fi, "%d%d%d%d", &sizex, &sizey, &vnum, &snum);vnum=1;
-    fclose(fi);
-    Polygon screen(sc);
-    Point2D Vy_2=(1.0/sizey)*screen.points2d[1], Vx_2=(1.0/sizex)*(screen.points2d[2]-screen.points2d[1]);
-    Point3D Vx(Vx_2.x, Vx_2.y, 0), Vy(Vy_2.x, Vy_2.y, 0);
+    int sizex = 768, sizey = 1024, samps = 8;	// # samples
+    Ray cam(Point3D(50, 52, 295.6), Point3D(0, -0.042612, -1).norm());	// cam pos, dir
+    Point3D cy = Point3D(sizey * .5035 / sizex, 0, 0), cx = (cy % cam.d).norm() * -.5035;
 
     int *spl = new int[mpin+1], per=sizex/mpin, res=sizex-mpin*per;
     memset(spl, 0, sizeof(spl));
@@ -240,79 +131,85 @@ int main( int argc, char** argv )
     for(int i=1;i<=mpin;i++)spl[i]=spl[i-1]+spl[i];
 
     vector<MPI_Request*> req;
-    vector<Color*> col;
+    vector<Point3D*> col;
 
     printf("myid=%d start=%d end=%d\n", myid, spl[myid], spl[myid+1]);
 
-    for(int i=spl[myid];i<spl[myid+1];i++)
+    for(int x=spl[myid];x<spl[myid+1];x++)
     {
-        printf("%d\n", i);
-        col.push_back(new Color[sizey]);
+        printf("%d\n", x);
+        col.push_back(new Point3D[sizey]);
         req.push_back(new MPI_Request[3*sizey]);
-        #pragma omp parallel for schedule(dynamic)
-        for(int j=0;j<sizey;j++)
-        {
-            col.back()[j]=Color(0,0,0);
-            for(int k=0;k<vnum;k++)
-            {
-                double dx=double(rand()%100000)/100000-0.5, dy=double(rand()%100000)/100000-0.5;
-                dx=0, dy=0;
-                Point3D ray = screen.rotate_r*((i+dx)*Vx+(j+dy)*Vy) - view;
-                col.back()[j] = col.back()[j] + RayTracing(view, ray, 1, false, snum);
-            }
+        #pragma omp parallel for schedule(dynamic, 1)
+        for (int y = 0; y < sizey; y++)
+        {	// Loop cols
+            Point3D r = Point3D(0);
+            for (int sy = 0; sy < 2; sy++)	// 2x2 subpixel rows
+                for (int sx = 0; sx < 2; sx++)
+                {	// 2x2 subpixel cols
+                    for (int s = 0; s < samps; s++)
+                    {
+                        double r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        double r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
+                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true) * (1. / samps);
+                    }	// Camera rays are pushed ^^^^^ forward to start in interior
+                    col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
+                }
         }
     }
+
     for(int i=spl[myid];i<spl[myid+1];i++)
     {
         for(int j=0;j<sizey;j++)
         {
-            MPI_Isend(&col[i-spl[myid]][j].r, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+0, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+0]);
-            MPI_Isend(&col[i-spl[myid]][j].g, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+1, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+1]);
-            MPI_Isend(&col[i-spl[myid]][j].b, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+2, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+2]);
+            MPI_Isend(&col[i-spl[myid]][j].x, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+0, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+0]);
+            MPI_Isend(&col[i-spl[myid]][j].y, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+1, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+1]);
+            MPI_Isend(&col[i-spl[myid]][j].z, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+2, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+2]);
         }
     }
     printf("myid=%d Finish\n", myid);
+
+    Mat image;
     if(!myid)
     {
         image.create(sizex, sizey, CV_8UC3);
         for(int k=0;k<mpin;k++)
         {
+            printf("Getdata id=%d\n", k);
             for(int i=spl[k];i<spl[k+1];i++)
             {
                 for(int j=0;j<sizey;j++)
                 {
-                    Color tmp(0,0,0);
-                    MPI_Recv(&(tmp.r), 1, MPI_DOUBLE, k, (i*sizey+j)*3+0, MPI_COMM_WORLD, &status);
-                    MPI_Recv(&(tmp.g), 1, MPI_DOUBLE, k, (i*sizey+j)*3+1, MPI_COMM_WORLD, &status);
-                    MPI_Recv(&(tmp.b), 1, MPI_DOUBLE, k, (i*sizey+j)*3+2, MPI_COMM_WORLD, &status);
-                    drawPixel(image, i, j, 1.0/vnum*tmp);
+                    Point3D tmp(0,0,0);
+                    MPI_Recv(&(tmp.x), 1, MPI_DOUBLE, k, (i*sizey+j)*3+0, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&(tmp.y), 1, MPI_DOUBLE, k, (i*sizey+j)*3+1, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&(tmp.z), 1, MPI_DOUBLE, k, (i*sizey+j)*3+2, MPI_COMM_WORLD, &status);
+                    drawPixel(image, i, j, tmp);
                 }
             }
         }
         printf("Save image to %s\n", "output.jpg");
         imwrite("output.jpg", image);
         if(!myid)printf("%lfs\n", MPI_Wtime()-start);
-        for(int i=0;i<req.size();i++)
-            for(int j=0;j<3*sizey;j++)
-                MPI_Wait(&req[i][j], &status);
-        namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
-        imshow( "Display Image", image );
-        waitKey(0);
-        MPI_Finalize(); 
-    }else
-    {
-        for(int i=0;i<req.size();i++)
-            for(int j=0;j<3*sizey;j++)
-                MPI_Wait(&req[i][j], &status);
-        MPI_Finalize(); 
     }
+    for(int i=0;i<req.size();i++)
+        for(int j=0;j<3*sizey;j++)
+            MPI_Wait(&req[i][j], &status);
+     MPI_Finalize();
     for(int i=0;i<req.size();i++)
     {
        delete [] req[i];
        delete [] col[i];
     }
     delete [] spl;
+    if(!myid)
+    {
+        namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
+        imshow( "Display Image", image );
+        waitKey(0);
+    }
     return 0;
-}
 
+}
 
