@@ -144,8 +144,8 @@ bool KdTree::check(const std::vector<Object> &objs, Point3D view, Point3D ray, i
         if(l)l->check(objs, view, ray, no, nv, p, dis);
         check_node(objs, view, ray, no1, nv1, p1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
-        if(dis < 1e10)return true;else if(v[w] < 0)return false;
-        if(r)r->check(objs, view, ray, no, nv, p, dis);
+        if(v[w] > 0 && r)r->check(objs, view, ray, no1, nv1, p1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
         return dis < 1e10;
     }
     if(s[w] > split)
@@ -153,8 +153,8 @@ bool KdTree::check(const std::vector<Object> &objs, Point3D view, Point3D ray, i
         if(r)r->check(objs, view, ray, no, nv, p, dis);
         check_node(objs, view, ray, no1, nv1, p1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
-        if(dis < 1e10)return true;else if(v[w] > 0)return false;
-        if(l)l->check(objs, view, ray, no, nv, p, dis);
+        if(v[w] < 0 && l)l->check(objs, view, ray, no1, nv1, p1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
         return dis < 1e10;
     }
     check_node(objs, view, ray, no1, nv1, p1, dis1);
