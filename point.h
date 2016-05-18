@@ -5,7 +5,11 @@ const double eps = 1e-5;
 struct Point3D
 {
     double x, y, z;
-    Point3D(double _x = 0.0, double _y = 0.0, double _z = 0.0)
+    Point3D(double t = 0)
+    {
+        x=y=z=t;
+    }
+    Point3D(double _x, double _y, double _z)
         :x(_x), y(_y), z(_z)
     {
     }
@@ -14,7 +18,11 @@ struct Point3D
 struct Point2D
 {
     double x, y;
-    Point2D(double _x = 0.0, double _y = 0.0)
+    Point2D(double t = 0)
+    {
+        x=y=t;
+    }
+    Point2D(double _x, double _y)
         :x(_x), y(_y)
     {
     }
@@ -36,8 +44,8 @@ double operator|(const Point2D &x, const Point2D &y);
 
 Point3D operator+(const Point3D &x, const Point3D &y);
 Point3D operator-(const Point3D &x, const Point3D &y);
-double operator*(const Point3D &x, const Point3D &y);
 Point3D operator*(const double &k, const Point3D &x);
+double operator*(const Point3D &x, const Point3D &y);
 Point3D operator^(const Point3D &x, const Point3D &y);
 
 
