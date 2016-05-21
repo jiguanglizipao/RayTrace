@@ -2,15 +2,27 @@
 #include "polygon.h"
 #include <cstdio>
 
-bool Polygon::SameSide(Point3D a, Point3D b, Point3D c, Point3D p) const
+double Polygon::intersect(const Ray & r) const
 {
-    return (((b-a)^(c-a))*((b-a)^(p-a))) > -eps;
-}
-
-Polygon::State Polygon::checkInside(Point3D p) const
-{
-    Point3D a=points3d[0], b=points3d[1], c=points3d[2];
-    if(SameSide(a, b, c, p) && SameSide(b, c, a, p) && SameSide(c, a, b, p))
-        return inside;
-    return outside;
+    Point3D E1 = points3d[1] - points3d[0];
+    Point3D E2 = points3d[2] - points3d[0];
+    Point3D P = r.d%E2;
+    double det = E1*P, u, v, t;
+    Point3D T;
+    if(det > 0)
+        T = r.o - points3d[0];
+    else
+        T = points3d[0] - r.o, det = -det;
+    if(det < eps)return 1e20;
+    u = T*P;
+    if( u < 0 || u > det )return 1e20;
+    Point3D Q = T%E1;
+    v = r.d*Q;
+    if(v < 0 || u + v > det )return 1e20;
+    t = E2*Q;
+    double fInvDet = 1.0 / det;
+    t *= fInvDet;
+    u *= fInvDet;
+    v *= fInvDet;
+    return t;
 }

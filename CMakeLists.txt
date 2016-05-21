@@ -15,10 +15,6 @@ endif()
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "-g -O3 -fopenmp")
 endif()
-#if(${CMAKE_CXX_COMPILER_ID} STREQUAL "PGI")
-#    set(CMAKE_CXX_FLAGS "-g -fast -acc -Minfo -ta=tesla:cc35")
-#endif()
-
-add_executable(Raytrace raytrace.cpp point.cpp)
+add_executable(Raytrace raytrace.cpp point.cpp polygon.cpp object.cpp kdtree.cpp sphere.cpp matrix.cpp)
 target_link_libraries(Raytrace ${OpenCV_LIBS} ${MPI_LIBRARIES})
 

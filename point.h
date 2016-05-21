@@ -3,6 +3,9 @@
 #include <cmath>
 
 const double eps = 1e-5;
+
+enum RType { DIFF, SPEC, REFR };	// material types, used in radiance()
+
 struct Point3D
 {
     double x, y, z;
@@ -50,7 +53,7 @@ struct Point3D
         return x * b.x + y * b.y + z * b.z;
     }
 
-    Point3D operator%(Point3D & b) {
+    Point3D operator%(const Point3D & b) const{
         return Point3D(y * b.z - z * b.y, z * b.x - x * b.z, x * b.y - y * b.x);
     }
 };

@@ -19,7 +19,7 @@ struct KdTreeNode
         :no(_no), nv(_nv)
     {
         init();
-        for(size_t i=0;i<a.points3d.size();i++)update(a.points3d[i]);
+        for(size_t i=0;i<3;i++)update(a.points3d[i]);
     }
 
     void init(double min=-1e10, double max=1e10)
@@ -43,7 +43,7 @@ struct KdTreeNode
         for(int i=0;i<3;i++)mi[i] = std::min(mi[i], a.mi[i]), ma[i] = std::max(ma[i], a.ma[i]);
     }
 
-    bool check_aabb(Point3D view, Point3D ray);
+    bool check_aabb(Ray ray);
 
 };
 
@@ -70,8 +70,8 @@ struct KdTree
     int w;
     double splitl, splitr, split;
     std::vector<KdTreeNode> node;
-    bool check(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis);
-    bool check_node(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis);
+    bool check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
+    bool check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
     KdTree(const std::vector<Object> &a, int s);
     KdTree(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
     void create(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);

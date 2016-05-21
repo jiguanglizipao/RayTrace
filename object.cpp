@@ -10,7 +10,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
     loc = _loc;
     polys.clear();
     points.clear();
-    rotate = M_PI/180*rotate;
+    rotate = rotate*(M_PI/180);
     Matrix t = Matrix::Rx(cos(rotate.x), sin(rotate.x))*Matrix::Ry(cos(rotate.y), sin(rotate.y))*Matrix::Rz(cos(rotate.z), sin(rotate.z));
     FILE *fp = fopen(filename.c_str(), "r");
     if(!fp){
@@ -80,15 +80,14 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
 
     for(std::size_t i=0;i<face.size();i++)
     {
-        if(face[i].size() < 3)
+        if(face[i].size() != 3)
         {
             printf("Error face.\n");
             points.clear();
             polys.clear();
             return false;
         }
-        std::vector<Point3D>tmp;
-        tmp.clear();
+        Point3D tmp[3];
         for(std::size_t j=0;j<face[i].size();j++)
         {
             if(face[i][j] >= points.size() || face[i][j] < 0)
@@ -98,7 +97,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                 polys.clear();
                 return false;
             }
-            tmp.push_back(points[face[i][j]]);
+            tmp[j] = points[face[i][j]];
         }
         polys.push_back(Polygon(tmp));
     }
