@@ -4,7 +4,7 @@ using namespace std;
 
 bool KdTreeNode::check_aabb(Ray ray)
 {
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.z, ray.d.z};
+    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     Point3D pos;
     if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
     for(int i=0;i<3;i++)

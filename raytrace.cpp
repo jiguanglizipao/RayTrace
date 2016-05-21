@@ -40,7 +40,6 @@ void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
 
 Point3D radiance(Ray r, int depth, bool into)
 {
-    r.d.norm();
     double ts, to=1e20;
     int ids, ido, idv;
     bool fs, fo;
@@ -79,7 +78,7 @@ Point3D radiance(Ray r, int depth, bool into)
         return lig + f.mult(radiance(Ray(x, r.d - n * 2 * (n*r.d)), depth, into));
 
     Ray reflRay(x, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
-    double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+    double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
     if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
         return lig + f.mult(radiance(reflRay, depth, into));
     Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
