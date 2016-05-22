@@ -1,4 +1,5 @@
 #include "kdtree.h"
+#include <cstdio>
 #include <algorithm>
 using namespace std;
 
@@ -132,25 +133,26 @@ bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &
 bool KdTree::check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis)
 {
     dis = 1e20;
-    if(!aabb.check_aabb(ray))return false;
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.z, ray.d.z};
-    int no1, nv1;
     double dis1=1e20;
+    if(!aabb.check_aabb(ray))return false;
+    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
+    int no1, nv1;
+    bool t = false;
     if(s[w] < split)
     {
-        if(l)l->check(objs, ray, no, nv, dis);
+        if(l)t = l->check(objs, ray, no, nv, dis);
         check_node(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
-        if(v[w] > 0 && r)r->check(objs, ray, no1, nv1, dis1);
+        if(r && !t && v[w]>0)r->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         return dis < 1e10;
     }
     if(s[w] > split)
     {
-        if(r)r->check(objs, ray, no, nv, dis);
+        if(r)t = r->check(objs, ray, no, nv, dis);
         check_node(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
-        if(v[w] < 0 && l)l->check(objs, ray, no1, nv1, dis1);
+        if(l && !t && v[w]<0)l->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         return dis < 1e10;
     }
