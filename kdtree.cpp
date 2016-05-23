@@ -123,8 +123,8 @@ bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &
     for(size_t l=0;l<node.size();l++)
     {
         int i=node[l].no, j=node[l].nv;
-        double t;
-        if((t=objs[i].polys[j].intersect(ray))<dis && t > eps)
+        double t, u, v;
+        if((t=objs[i].polys[j].intersect(ray, u, v))<dis && t > eps)
             dis=t, no=i, nv=j;
     }
     return dis < 1e10;

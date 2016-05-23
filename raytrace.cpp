@@ -1,9 +1,3 @@
-#include <cv.h>
-#if CV_VERSION_MAJOR == 3
-#include <opencv2/highgui.hpp>
-#else
-#include <opencv/highgui.h>
-#endif
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -57,8 +51,13 @@ Point3D radiance(Ray r, int depth, bool into)
     }
     else
     {
-        x = r.o + r.d * to, n = objs[ido].polys[idv].n, nl = ((n*r.d) < 0 ? n : n * -1);
-        f = objs[ido].col, type = objs[ido].type, lig = objs[ido].lig;
+        double u, v;
+        objs[ido].polys[idv].intersect(r, u, v);
+        x = r.o + r.d * to;
+        n = objs[ido].polys[idv].getn(x);
+        nl = ((n*r.d) < 0 ? n : n * -1);
+        f = objs[ido].polys[idv].getcol(u, v);
+        type = objs[ido].type, lig = objs[ido].lig;
     }
 
     double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
@@ -103,7 +102,7 @@ int main(int argc, char *argv[])
     for(int i=0;i<n;i++)
     {
         objs.push_back(Object());
-        char buf[256];
+        char buf[256], buf2[256];
         fscanf(fi, "%s", buf);
         Point3D loc, rotate;
         double times;
@@ -112,11 +111,11 @@ int main(int argc, char *argv[])
         fscanf(fi, "%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
         fscanf(fi, "%lf%lf%lf", &objs[i].lig.x, &objs[i].lig.y, &objs[i].lig.z);
         fscanf(fi, "%lf%lf%lf", &objs[i].col.x, &objs[i].col.y, &objs[i].col.z);
-        if(!objs[i].readfile(string(buf), times, loc, rotate)) return 0;
-        fscanf(fi, "%s", buf);
-        if(buf[0] == 'D')objs[i].type = DIFF;
-        else if(buf[0] == 'S')objs[i].type = SPEC;
+        fscanf(fi, "%s", buf2);
+        if(buf2[0] == 'D')objs[i].type = DIFF;
+        else if(buf2[0] == 'S')objs[i].type = SPEC;
         else objs[i].type = REFR;
+        if(!objs[i].readfile(string(buf), times, loc, rotate)) return 0;
     }
     kdtree = new KdTree(objs, 0);
 

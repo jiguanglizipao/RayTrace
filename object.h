@@ -8,7 +8,9 @@
 struct Object
 {
     std::vector<Polygon> polys;
-    std::vector<Point3D> points;
+    std::vector<Point3D> points, cols;
+    std::vector<cv::Mat*> tex;
+    std::vector<std::string> name;
     double times;
     Point3D loc, col, lig;
     RType type;
