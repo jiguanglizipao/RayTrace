@@ -6,11 +6,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cv.hpp>
-//#if CV_VERSION_MAJOR == 3
-//#include <opencv2/highgui.hpp>
-//#else
-//#include <opencv/highgui.h>
-//#endif
+#if CV_VERSION_MAJOR == 3
+#include <opencv2/highgui.hpp>
+#else
+#include <opencv/highgui.h>
+#endif
 #include "matrix.h"
 
 struct Polygon

@@ -115,7 +115,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                         FILE *ft = fopen(str, "r");
                         if(!ft)break;else fclose(ft);
                         Mat image = imread(str);
-                        Size size = Size(image.cols*times,image.rows*times);
+                        Size size = Size(image.cols*times, image.rows*times);
                         tex.back() = new Mat(size, CV_8UC3);
                         resize(image, *tex.back(), size);
                     }
@@ -167,6 +167,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                 Point3D v;
                 if(fscanf(fp, "%lf%lf",&v.x, &v.y)==2)
                 {
+                //    v.x*=times, v.y*=times, v.z*=times;
                     vt.push_back(v);
                 }
                 else

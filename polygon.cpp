@@ -2,12 +2,12 @@
 #include "polygon.h"
 #include <cstdio>
 
-static inline unsigned char GetImageData(const cv::Mat &image, int x, int y, int c)
+static inline unsigned char GetImageData(const cv::Mat &image, double x, double y, int c)
 {
-    int nr= image.rows; // number of rows
-    int nc= image.cols * image.channels(); // total number of elements per line
-    const uchar* data= image.ptr<uchar>(y);
-    return data[3*x+c];
+    int nr = image.rows; // number of rows
+    int nc = image.cols * image.channels(); // total number of elements per line
+    const uchar* data= image.ptr<uchar>(int(x*nr+0.5)%nr);
+    return data[3*(int(y*nc+0.5)%nc)+c];
 }
 
 
@@ -54,6 +54,7 @@ Point3D Polygon::getcol(double u, double v) const
     if(!tex)return col;
     Point3D s = (ts[1]-ts[0])*u+(ts[2]-ts[0])*v+ts[0];
     Point3D ans;
+    //if(s.x > 2 || s.y > 2)printf("%lf %lf\n", s.x, s.y);
     ans.x = GetImageData(*tex, s.x, s.y, 2);
     ans.y = GetImageData(*tex, s.x, s.y, 1);
     ans.z = GetImageData(*tex, s.x, s.y, 0);
@@ -61,6 +62,6 @@ Point3D Polygon::getcol(double u, double v) const
 //    ans.x = tex->at<cv::Vec3b>(s.x,s.y)[2];
 //    ans.y = tex->at<cv::Vec3b>(s.x,s.y)[1];
 //    ans.z = tex->at<cv::Vec3b>(s.x,s.y)[0];
-    ans.x = pow(ans.x/255, 2.2);ans.y = pow(ans.y/255, 2.2);ans.z = pow(ans.z/255, 2.2);
+    ans.x = pow(ans.x/256, 2.2);ans.y = pow(ans.y/256, 2.2);ans.z = pow(ans.z/256, 2.2);
     return ans;
 }

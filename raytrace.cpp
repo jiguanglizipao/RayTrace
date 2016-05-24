@@ -72,19 +72,19 @@ Point3D radiance(Ray r, int depth, bool into)
         double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
         Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
         Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
-        return lig + f.mult(radiance(Ray(x, d), depth, into));
+        return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into));
     } else if (type == SPEC)	// Ideal SPECULAR reflection
-        return lig + f.mult(radiance(Ray(x, r.d - n * 2 * (n*r.d)), depth, into));
+        return lig + f.mult(radiance(Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into));
 
-    Ray reflRay(x, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
+    Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
     double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
     if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
         return lig + f.mult(radiance(reflRay, depth, into));
     Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
     double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
     double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
-    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x, tdir), depth, !into) * TP) :
-                                        radiance(reflRay, depth, into) * Re + radiance(Ray(x, tdir), depth, !into) * Tr);
+    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP) :
+                                        radiance(reflRay, depth, into) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into) * Tr);
 }
 
 int main(int argc, char *argv[])
