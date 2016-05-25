@@ -6,7 +6,7 @@
 using namespace std;
 using namespace cv;
 
-bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D rotate)
+bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D rotate)
 {
     times = _times;
     loc = _loc;
@@ -48,8 +48,8 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             for(int i=0;i<tex.size();i++)if(name[i] == string(str))ntex = i;
             break;
 
-        case 'm':				/* comment */
-            /* eat up rest of line */
+        case 'm':
+        {
             fgets(buf, sizeof(buf), fp);
             sscanf(buf, "%s", str);
             FILE *fm = fopen(str, "r");
@@ -76,7 +76,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
                         if(type == DIFF)
                         {
                             Point3D v;
-                            if(fscanf(fm, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                            if(fscanf(fm, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                             {
                             }
                             else
@@ -92,7 +92,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
                         if(type != DIFF)
                         {
                             Point3D v;
-                            if(fscanf(fm, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                            if(fscanf(fm, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                             {
                             }
                             else
@@ -142,13 +142,14 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             }
             fclose(fm);
             break;
+        }
         case 'v':				/* v, vn, vt */
             switch(buf[1])
             {
             case '\0':			    /* vertex */
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                 {
                     v.x*=times, v.y*=times, v.z*=times;
                     v = t*v;
@@ -164,7 +165,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             case 'n':
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                 {
                     v = t*v;
                     vn.push_back(v.norm());
@@ -179,7 +180,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             case 't':
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f",&v.x, &v.y)==2)
+                if(fscanf(fp, "%lf%lf",&v.x, &v.y)==2)
                 {
                 //    v.x*=times, v.y*=times, v.z*=times;
                     vt.push_back(v);

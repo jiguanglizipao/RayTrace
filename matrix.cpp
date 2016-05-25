@@ -36,9 +36,9 @@ Point3D operator* (Matrix b, Point3D a)
     return Point3D(ans.a[0][0], ans.a[1][0], ans.a[2][0]);
 }
 
-Matrix Matrix::RotateMatrix(Point3D s, Point3D p, float theta)
+Matrix Matrix::RotateMatrix(Point3D s, Point3D p, double theta)
 {
-    float u=p.x, v=p.y, w=p.z;
+    double u=p.x, v=p.y, w=p.z;
     Matrix a(4, 4);
     a.a[0][0]=u*u+(v*v+w*w)*cos(theta);
     a.a[0][1]=u*v*(1-cos(theta))-w*sin(theta);
