@@ -1,6 +1,6 @@
 #include "sphere.h"
 
-bool sphere_intersect(Sphere spheres[], int n, const Ray & r, int &id, double &t)
+bool sphere_intersect(const Sphere spheres[], int n, const Ray & r, int &id, double &t)
 {
     double d;
     t = 1e20;

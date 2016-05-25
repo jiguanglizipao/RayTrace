@@ -1,10 +1,10 @@
-#include "object.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <fstream>
+#include "object.h"
+#include "opencvlib.h"
 using namespace std;
-using namespace cv;
 
 bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D rotate)
 {
@@ -115,23 +115,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                         memset(buf, 0, sizeof(buf));
                         fgets(buf, sizeof(buf), fm);
                         sscanf(buf, "%s", str);
-                        FILE *ft = fopen(str, "r");
-                        if(!ft)break;else fclose(ft);
-                        Mat image = imread(str);
-                        Size size = Size(image.cols*times, image.rows*times);
-                        Mat im(size, CV_8UC3);
-                        resize(image, im, size);
-                        sizex.back() = image.cols*times;
-                        sizey.back() = image.rows*times;
-                        int nr = im.rows;
-                        int nc = im.cols * im.channels();
-                        tex.back() = new unsigned char[nr*nc];
-                        unsigned char *t=tex.back();
-                        for(int i=0;i<nr;i++)
-                        {
-                            const uchar* data= im.ptr<uchar>(i);
-                            for(int j=0;j<nc;j++)*(t++) = data[j];
-                        }
+                        loadImage(tex.back(), sizex.back(), sizey.back(), str, times);
                     }
                     else fgets(buf, sizeof(buf), fm);
                     break;
@@ -296,7 +280,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
             t[j] = vt[T[i][j]];
             ntex = Tex[i];
         }
-        polys.push_back(Polygon(tmp, n, t, lig, cols[ntex], tex[ntex], sizex[ntex], sizey[ntex]));
+        polys.push_back(Polygon(tmp, n, t, lig, cols[ntex], type, tex[ntex], sizex[ntex], sizey[ntex]));
     }
     return true;
 }

@@ -4,12 +4,6 @@
 #include "polygon.h"
 #include <vector>
 #include <string>
-#include <cv.hpp>
-#if CV_VERSION_MAJOR == 3
-#include <opencv2/highgui.hpp>
-#else
-#include <opencv/highgui.h>
-#endif
 
 struct Object
 {

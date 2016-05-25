@@ -7,10 +7,10 @@ struct Sphere
     double rad;
     Point3D pos, lig, col;
     RType type;
-    Sphere(double rad_, Point3D pos_, Point3D lig_, Point3D col_, RType type_)
+    __device__ __host__ Sphere(double rad_, Point3D pos_, Point3D lig_, Point3D col_, RType type_)
         :rad(rad_), pos(pos_), lig(lig_), col(col_), type(type_) {
     }
-    double intersect(const Ray & r) const
+    __device__ __host__ double intersect(const Ray & r) const
     {
         Point3D op = pos - r.o;
         double t, b = op * r.d, det = b * b - op * op + rad * rad;
@@ -21,6 +21,6 @@ struct Sphere
     }
 };
 
-bool sphere_intersect(Sphere spheres[], int n, const Ray & r, int &id, double &t);
+bool sphere_intersect(const Sphere spheres[], int n, const Ray & r, int &id, double &t);
 
 #endif

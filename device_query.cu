@@ -1,4 +1,4 @@
-#include "cuda.h"
+#include "cuda_raytrace.h"
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>

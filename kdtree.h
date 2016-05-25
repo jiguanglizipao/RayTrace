@@ -1,34 +1,35 @@
 #ifndef KDTREE_H
 #define KDTREE_H
 
+#include <cuda_runtime.h>
 #include "point.h"
 #include "polygon.h"
 #include "object.h"
-#include "algorithm"
+#include <algorithm>
 
 struct KdTreeNode
 {
     int no, nv;
     double mi[3], ma[3];
-    KdTreeNode()
+    __device__ __host__ KdTreeNode()
     {
         no=nv=-1;
     }
 
-    KdTreeNode(const Polygon &a, int _no, int _nv)
+    __device__ __host__ KdTreeNode(const Polygon &a, int _no, int _nv)
         :no(_no), nv(_nv)
     {
         init();
         for(size_t i=0;i<3;i++)update(a.points3d[i]);
     }
 
-    void init(double min=-1e10, double max=1e10)
+    __device__ __host__ void init(double min=-1e10, double max=1e10)
     {
         mi[0]=mi[1]=mi[2]=max;
         ma[0]=ma[1]=ma[2]=min;
     }
 
-    void update(const Point3D &a)
+    __device__ __host__ void update(const Point3D &a)
     {
         mi[0] = std::min(mi[0], a.x);
         mi[1] = std::min(mi[1], a.y);
@@ -38,12 +39,31 @@ struct KdTreeNode
         ma[2] = std::max(ma[2], a.z);
     }
 
-    void update(const KdTreeNode &a)
+    __device__ __host__ void update(const KdTreeNode &a)
     {
         for(int i=0;i<3;i++)mi[i] = std::min(mi[i], a.mi[i]), ma[i] = std::max(ma[i], a.ma[i]);
     }
 
-    bool check_aabb(Ray ray);
+    __device__ __host__ bool check_aabb(const Ray &ray) const
+    {
+        double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
+        Point3D pos;
+        if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
+        for(int i=0;i<3;i++)
+        {
+            if (fabs(v[i]) > eps)
+            {
+                double t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
+                if (t > eps)
+                {
+                    pos = ray.o + ray.d*t;
+                    double p[3]={pos.x, pos.y, pos.z};
+                    if (mi[(i+1)%3]<p[(i+1)%3]+eps && p[(i+1)%3]<ma[(i+1)%3]+eps && mi[(i+2)%3]<p[(i+2)%3]+eps && p[(i+2)%3]<ma[(i+2)%3]+eps)return true;
+                }
+            }
+        }
+        return false;
+    }
 
 };
 
@@ -67,19 +87,21 @@ struct KdTree
 {
     KdTree *l, *r;
     KdTreeNode aabb;
-    int w;
+    int w, cu_num;
     double splitl, splitr, split;
     std::vector<KdTreeNode> node;
-    bool check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
-    bool check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
+    KdTreeNode *cu_node;
+
+    bool check(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis);
+    bool check_node(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis);
     KdTree(const std::vector<Object> &a, int s);
     KdTree(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
     void create(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
 
     ~KdTree()
     {
-        delete l;
-        delete r;
+        if(!l)delete l;
+        if(!r)delete r;
     }
 };
 

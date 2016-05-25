@@ -3,28 +3,6 @@
 #include <algorithm>
 using namespace std;
 
-bool KdTreeNode::check_aabb(Ray ray)
-{
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
-    Point3D pos;
-    if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
-    for(int i=0;i<3;i++)
-    {
-        if (fabs(v[i]) > eps)
-        {
-            double t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
-            if (t > eps)
-            {
-                pos = ray.o + ray.d*t;
-                double p[3]={pos.x, pos.y, pos.z};
-                if (mi[(i+1)%3]<p[(i+1)%3]+eps && p[(i+1)%3]<ma[(i+1)%3]+eps && mi[(i+2)%3]<p[(i+2)%3]+eps && p[(i+2)%3]<ma[(i+2)%3]+eps)return true;
-            }
-        }
-    }
-    return false;
-}
-
-
 KdTree::KdTree(const vector<Object> &a, int s)
     :l(NULL), r(NULL)
 {
@@ -117,7 +95,7 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
 }
 
-bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis)
+bool KdTree::check_node(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis)
 {
     dis=1e20;
     for(size_t l=0;l<node.size();l++)
@@ -130,7 +108,7 @@ bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &
     return dis < 1e10;
 }
 
-bool KdTree::check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis)
+bool KdTree::check(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis)
 {
     dis = 1e20;
     double dis1=1e20;

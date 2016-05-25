@@ -5,12 +5,18 @@
 #include <algorithm>
 #include <cmath>
 #include <mpi.h>
+#include <cv.hpp>
+#if CV_VERSION_MAJOR == 3
+#include <opencv2/highgui.hpp>
+#else
+#include <opencv/highgui.h>
+#endif
 #include "point.h"
 #include "sphere.h"
 #include "polygon.h"
 #include "object.h"
 #include "kdtree.h"
-#include "cuda.h"
+#include "cuda_raytrace.h"
 
 using namespace std;
 using namespace cv;
@@ -18,8 +24,6 @@ using namespace cv;
 vector<Object> objs;
 vector<Sphere> spheres;
 KdTree *kdtree;
-
-Polygon *cu_polys;
 
 inline double norm(double x)
 {
@@ -36,11 +40,17 @@ void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
 
 Point3D radiance(Ray r, int depth, bool into)
 {
-    double ts, to=1e20;
+    double ts, to=1e20, tt;
     int ids, ido, idv;
     bool fs, fo;
     fo = kdtree->check(objs, r, ido, idv, to);
+    cuda_test(spheres, r, tt);
     fs = sphere_intersect(&spheres[0], spheres.size(), r, ids, ts);
+//    if(fabs(tt-ts) > 1e-5)
+//    {
+//        printf("%lf %lf\n", tt, ts);
+//        exit(0);
+//    }
     if(!fo && !fs)return Point3D();
     Point3D x, n, nl, f, lig;
     RType type;
@@ -158,15 +168,13 @@ int main(int argc, char *argv[])
     if(dev_num < GPU_PER_NODE)return 1;
     int dev = myid%GPU_PER_NODE;
     print_device_info(myid, dev);
-//    int sump=0;
-//    for(int i=0;i<objs.size();i++)sump+=objs.size();
-//    size_t size = sump * sizeof(Polygon);
-//    cudaMalloc((void**) &cu_polys, size);
-//    cudaMemset(cu_polys,0,size);
-//    for(int i=0, sum=0;i<objs.size();sum+=objs[i].polys.size(), i++)
-//    {
-//        cudaMemcpy(&objs[0].polys[0], cu_polys+sum, objs[0].polys.size()*sizeof(Polygon), cudaMemcpyHostToDevice);
-//    }
+    cudaSetDevice(dev);
+#if CUDART_VERSION >= 4000
+    cudaDeviceSetLimit(cudaLimitStackSize, 8192);
+#else
+    cudaThreadSetLimit(cudaLimitStackSize, 8192);
+#endif
+    copyToDevice(spheres, objs, kdtree);
     vector<MPI_Request> req;
     vector<Point3D*> col;
 
@@ -176,11 +184,11 @@ int main(int argc, char *argv[])
     {
         printf("%d\n", x);
         col.push_back(new Point3D[sizey]);
-        #pragma omp parallel for schedule(dynamic, 1)
+        //#pragma omp parallel for schedule(dynamic, 1)
         for (int y = 0; y < sizey; y++)
         {	// Loop cols
-            Point3D r = Point3D(0);
-            for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++)
+            Point3D r;// = cuda_radiance(x, y, sizex, sizey, samps, cx, cy, cam);
+            for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++,r=Point3D())
             {	// 2x2 subpixel cols
                 for (int s = 0; s < samps; s++)
                 {
@@ -191,6 +199,7 @@ int main(int argc, char *argv[])
                 }	// Camera rays are pushed ^^^^^ forward to start in interior
                 col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
             }
+            //col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z));
         }
     }
 
