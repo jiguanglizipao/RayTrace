@@ -16,6 +16,6 @@ endif()
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "-g -O3 -fopenmp")
 endif()
-add_executable(Raytrace raytrace.cpp point.cpp polygon.cpp object.cpp kdtree.cpp sphere.cpp matrix.cpp)
-target_link_libraries(Raytrace ${OpenCV_LIBS} ${MPI_LIBRARIES})
+add_executable(RayTrace raytrace.cpp point.cpp polygon.cpp object.cpp kdtree.cpp sphere.cpp matrix.cpp)
+target_link_libraries(RayTrace ${OpenCV_LIBS} ${MPI_LIBRARIES})
 

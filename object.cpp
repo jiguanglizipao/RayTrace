@@ -47,7 +47,8 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
             for(int i=0;i<tex.size();i++)if(name[i] == string(str))ntex = i;
             break;
 
-        case 'm':				/* comment */
+        case 'm':
+        {
             /* eat up rest of line */
             fgets(buf, sizeof(buf), fp);
             sscanf(buf, "%s", str);
@@ -128,6 +129,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
             }
             fclose(fm);
             break;
+        }
         case 'v':				/* v, vn, vt */
             switch(buf[1])
             {

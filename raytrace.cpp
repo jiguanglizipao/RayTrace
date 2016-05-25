@@ -164,8 +164,8 @@ int main(int argc, char *argv[])
         #pragma omp parallel for schedule(dynamic, 1)
         for (int y = 0; y < sizey; y++)
         {	// Loop cols
-            Point3D r = Point3D(0);
-            for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++)
+            Point3D r;
+            for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++,r=Point3D())
             {	// 2x2 subpixel cols
                 for (int s = 0; s < samps; s++)
                 {
@@ -176,6 +176,7 @@ int main(int argc, char *argv[])
                 }	// Camera rays are pushed ^^^^^ forward to start in interior
                 col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
             }
+
         }
     }
 
