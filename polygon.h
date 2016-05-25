@@ -5,20 +5,15 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
-#include <cv.hpp>
-#if CV_VERSION_MAJOR == 3
-#include <opencv2/highgui.hpp>
-#else
-#include <opencv/highgui.h>
-#endif
 #include "matrix.h"
 
 struct Polygon
 {
     Point3D points3d[3], n[3], ts[3], lig, col, nc;
-    const cv::Mat *tex;
-    Polygon(const Point3D points3d_[], const Point3D n_[], const Point3D ts_[], Point3D lig_, Point3D col_, const cv::Mat *tex_)
-        :lig(lig_), col(col_), tex(tex_)
+    unsigned char *tex;
+    int sizex, sizey;
+    Polygon(const Point3D points3d_[], const Point3D n_[], const Point3D ts_[], Point3D lig_, Point3D col_, unsigned char *tex_, int sizex_, int sizey_)
+        :lig(lig_), col(col_), tex(tex_), sizex(sizex_), sizey(sizey_)
     {
         for(int i=0;i<3;i++)points3d[i] = points3d_[i];
         for(int i=0;i<3;i++)n[i] = n_[i]-points3d_[i];

@@ -13,6 +13,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
     polys.clear();
     points.clear();
     tex.resize(1, NULL);
+    sizex.resize(1, 0);sizey.resize(1, 0);
     cols.resize(1, col);
     name.resize(1);
     vector<Point3D> vn, vt;
@@ -61,6 +62,8 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                     sscanf(buf, "%s", str);
                     name.push_back(string(str));
                     tex.push_back(NULL);
+                    sizex.push_back(0);
+                    sizey.push_back(0);
                     cols.push_back(col);
                     break;
                 case 'K':
@@ -116,8 +119,19 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
                         if(!ft)break;else fclose(ft);
                         Mat image = imread(str);
                         Size size = Size(image.cols*times, image.rows*times);
-                        tex.back() = new Mat(size, CV_8UC3);
-                        resize(image, *tex.back(), size);
+                        Mat im(size, CV_8UC3);
+                        resize(image, im, size);
+                        sizex.back() = image.cols*times;
+                        sizey.back() = image.rows*times;
+                        int nr = im.rows;
+                        int nc = im.cols * im.channels();
+                        tex.back() = new unsigned char[nr*nc];
+                        unsigned char *t=tex.back();
+                        for(int i=0;i<nr;i++)
+                        {
+                            const uchar* data= im.ptr<uchar>(i);
+                            for(int j=0;j<nc;j++)*(t++) = data[j];
+                        }
                     }
                     else fgets(buf, sizeof(buf), fm);
                     break;
@@ -281,7 +295,7 @@ bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D
             t[j] = vt[T[i][j]];
             ntex = Tex[i];
         }
-        polys.push_back(Polygon(tmp, n, t, lig, cols[ntex], tex[ntex]));
+        polys.push_back(Polygon(tmp, n, t, lig, cols[ntex], tex[ntex], sizex[ntex], sizey[ntex]));
     }
     return true;
 }

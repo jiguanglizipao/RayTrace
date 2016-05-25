@@ -10,7 +10,7 @@
 #include "polygon.h"
 #include "object.h"
 #include "kdtree.h"
-//#include "light.h"
+#include "cuda.h"
 
 using namespace std;
 using namespace cv;
@@ -18,6 +18,8 @@ using namespace cv;
 vector<Object> objs;
 vector<Sphere> spheres;
 KdTree *kdtree;
+
+Polygon *cu_polys;
 
 inline double norm(double x)
 {
@@ -152,6 +154,19 @@ int main(int argc, char *argv[])
     for(int i=mpin-1;i>=0;i--,res--)spl[i+1]=per+(res>0);
     for(int i=1;i<=mpin;i++)spl[i]=spl[i-1]+spl[i];
 
+    int dev_num = check_device();
+    if(dev_num < GPU_PER_NODE)return 1;
+    int dev = myid%GPU_PER_NODE;
+    print_device_info(myid, dev);
+//    int sump=0;
+//    for(int i=0;i<objs.size();i++)sump+=objs.size();
+//    size_t size = sump * sizeof(Polygon);
+//    cudaMalloc((void**) &cu_polys, size);
+//    cudaMemset(cu_polys,0,size);
+//    for(int i=0, sum=0;i<objs.size();sum+=objs[i].polys.size(), i++)
+//    {
+//        cudaMemcpy(&objs[0].polys[0], cu_polys+sum, objs[0].polys.size()*sizeof(Polygon), cudaMemcpyHostToDevice);
+//    }
     vector<MPI_Request> req;
     vector<Point3D*> col;
 
