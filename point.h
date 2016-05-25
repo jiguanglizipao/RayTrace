@@ -2,22 +2,22 @@
 #define POINT_H
 #include <cmath>
 
-const double eps = 1e-5;
+const float eps = 1e-5;
 
 enum RType { DIFF, SPEC, REFR };	// material types, used in radiance()
 
 struct Point3D
 {
-    double x, y, z;
+    float x, y, z;
 
-    Point3D(double t=0)
+    Point3D(float t=0)
     {
         x = t;
         y = t;
         z = t;
     }
 
-    Point3D(double x_, double y_, double z_)
+    Point3D(float x_, float y_, float z_)
     {
         x = x_;
         y = y_;
@@ -34,7 +34,7 @@ struct Point3D
         return Point3D(x - b.x, y - b.y, z - b.z);
     }
 
-    Point3D operator*(double b) const
+    Point3D operator*(float b) const
     {
         return Point3D(x * b, y * b, z * b);
     }
@@ -48,7 +48,7 @@ struct Point3D
         return *this = *this * (1 / sqrt(x * x + y * y + z * z));
     }
 
-    double operator*(const Point3D & b) const
+    float operator*(const Point3D & b) const
     {
         return x * b.x + y * b.y + z * b.z;
     }

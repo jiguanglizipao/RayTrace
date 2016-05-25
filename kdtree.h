@@ -9,7 +9,7 @@
 struct KdTreeNode
 {
     int no, nv;
-    double mi[3], ma[3];
+    float mi[3], ma[3];
     KdTreeNode()
     {
         no=nv=-1;
@@ -22,7 +22,7 @@ struct KdTreeNode
         for(size_t i=0;i<3;i++)update(a.points3d[i]);
     }
 
-    void init(double min=-1e10, double max=1e10)
+    void init(float min=-1e10, float max=1e10)
     {
         mi[0]=mi[1]=mi[2]=max;
         ma[0]=ma[1]=ma[2]=min;
@@ -51,8 +51,8 @@ struct KdTreeTemp
 {
     size_t pos;
     bool in;
-    double x;
-    KdTreeTemp(size_t _pos, bool _in, double _x)
+    float x;
+    KdTreeTemp(size_t _pos, bool _in, float _x)
         :pos(_pos), in(_in), x(_x)
     {
     }
@@ -68,10 +68,10 @@ struct KdTree
     KdTree *l, *r;
     KdTreeNode aabb;
     int w;
-    double splitl, splitr, split;
+    float splitl, splitr, split;
     std::vector<KdTreeNode> node;
-    bool check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
-    bool check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis);
+    bool check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, float &dis);
+    bool check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, float &dis);
     KdTree(const std::vector<Object> &a, int s);
     KdTree(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
     void create(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);

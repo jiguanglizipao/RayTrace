@@ -25,9 +25,9 @@ struct Polygon
         nc.norm();
     }
 
-    double intersect(const Ray & r, double &u, double &v) const;
+    float intersect(const Ray & r, float &u, float &v) const;
     Point3D getn(Point3D x) const;
-    Point3D getcol(double u, double v) const;
+    Point3D getcol(float u, float v) const;
 
 };
 

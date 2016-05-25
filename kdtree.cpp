@@ -5,18 +5,18 @@ using namespace std;
 
 bool KdTreeNode::check_aabb(Ray ray)
 {
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
+    float s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     Point3D pos;
     if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
     for(int i=0;i<3;i++)
     {
         if (fabs(v[i]) > eps)
         {
-            double t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
+            float t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
             if (t > eps)
             {
                 pos = ray.o + ray.d*t;
-                double p[3]={pos.x, pos.y, pos.z};
+                float p[3]={pos.x, pos.y, pos.z};
                 if (mi[(i+1)%3]<p[(i+1)%3]+eps && p[(i+1)%3]<ma[(i+1)%3]+eps && mi[(i+2)%3]<p[(i+2)%3]+eps && p[(i+2)%3]<ma[(i+2)%3]+eps)return true;
             }
         }
@@ -62,16 +62,16 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     }
 
 //    int suml=0, summ=0, sumr=pre.size();
-//    double mi = 0.5*pre.size()+pow(max(suml, sumr), 2.0/3.0);
+//    float mi = 0.5*pre.size()+pow(max(suml, sumr), 2.0/3.0);
 //    split = com[w][0].x-eps;
 //    for(size_t i=0;i<com[w].size();)
 //    {
-//        double c = com[w][i].x;
+//        float c = com[w][i].x;
 //        for(;i<com[w].size() && com[w][i].x<c+eps;i++)
 //        {
 //            if(com[w][i].in)summ++, sumr--;else suml++, summ--;
 //        }
-//        double t = 0.5*abs(suml-sumr)+pow(max(suml, sumr), 2.0/3.0)+summ;
+//        float t = 0.5*abs(suml-sumr)+pow(max(suml, sumr), 2.0/3.0)+summ;
 //        if(t < mi)mi = t, split = c;
 //    }
 
@@ -117,25 +117,25 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
 }
 
-bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis)
+bool KdTree::check_node(const std::vector<Object> &objs, Ray ray, int &no, int &nv, float &dis)
 {
     dis=1e20;
     for(size_t l=0;l<node.size();l++)
     {
         int i=node[l].no, j=node[l].nv;
-        double t, u, v;
+        float t, u, v;
         if((t=objs[i].polys[j].intersect(ray, u, v))<dis && t > eps)
             dis=t, no=i, nv=j;
     }
     return dis < 1e10;
 }
 
-bool KdTree::check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, double &dis)
+bool KdTree::check(const std::vector<Object> &objs, Ray ray, int &no, int &nv, float &dis)
 {
     dis = 1e20;
-    double dis1=1e20;
+    float dis1=1e20;
     if(!aabb.check_aabb(ray))return false;
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
+    float s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     int no1, nv1;
     bool t = false;
     if(s[w] < split)

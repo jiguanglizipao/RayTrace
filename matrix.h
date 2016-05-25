@@ -6,14 +6,14 @@
 
 struct Matrix
 {
-    double a[4][4], n, m;
+    float a[4][4], n, m;
     Matrix(int _n, int _m)
         :n(_n), m(_m)
     {
         for(int i=0;i<n;i++)for(int j=0;j<n;j++)a[i][j]=0;
     }
 
-    static Matrix T(double x, double y, double z)
+    static Matrix T(float x, float y, float z)
     {
         Matrix ans(4, 4);
         ans.a[0][0]=ans.a[1][1]=ans.a[2][2]=ans.a[3][3] = 1;
@@ -21,7 +21,7 @@ struct Matrix
         return ans;
     }
 
-    static Matrix Rx(double cost, double sint)
+    static Matrix Rx(float cost, float sint)
     {
         Matrix ans(4, 4);
         ans.a[0][0]=ans.a[3][3]=1;
@@ -31,7 +31,7 @@ struct Matrix
         return ans;
     }
 
-    static Matrix Ry(double cost, double sint)
+    static Matrix Ry(float cost, float sint)
     {
         Matrix ans(4, 4);
         ans.a[1][1]=ans.a[3][3]=1;
@@ -41,7 +41,7 @@ struct Matrix
         return ans;
     }
 
-    static Matrix Rz(double cost, double sint)
+    static Matrix Rz(float cost, float sint)
     {
         Matrix ans(4, 4);
         ans.a[2][2]=ans.a[3][3]=1;
@@ -50,7 +50,7 @@ struct Matrix
         ans.a[0][1]*=-1;
         return ans;
     }
-    static Matrix RotateMatrix(Point3D s, Point3D v, double theta);
+    static Matrix RotateMatrix(Point3D s, Point3D v, float theta);
 };
 
 Matrix operator+ (Matrix a, Matrix b);
