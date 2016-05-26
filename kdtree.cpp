@@ -33,7 +33,7 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     w = s;
     aabb.init();
     for(size_t i=0;i<pre.size();i++)aabb.update(pre[i]);
-    if(pre.size() < 4)
+    if(pre.size() < 8)
     {
         node = pre;
         return;

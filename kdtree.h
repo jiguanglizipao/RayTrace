@@ -16,6 +16,16 @@ struct KdTreeNode
         no=nv=-1;
     }
 
+    __device__ __host__ double min(double a, double b)
+    {
+        if(a < b)return a;else return b;
+    }
+    
+    __device__ __host__ double max(double a, double b)
+    {
+        if(a > b)return a;else return b;
+    }
+
     __device__ __host__ KdTreeNode(const Polygon &a, int _no, int _nv)
         :no(_no), nv(_nv)
     {
@@ -31,17 +41,17 @@ struct KdTreeNode
 
     __device__ __host__ void update(const Point3D &a)
     {
-        mi[0] = std::min(mi[0], a.x);
-        mi[1] = std::min(mi[1], a.y);
-        mi[2] = std::min(mi[2], a.z);
-        ma[0] = std::max(ma[0], a.x);
-        ma[1] = std::max(ma[1], a.y);
-        ma[2] = std::max(ma[2], a.z);
+        mi[0] = min(mi[0], a.x);
+        mi[1] = min(mi[1], a.y);
+        mi[2] = min(mi[2], a.z);
+        ma[0] = max(ma[0], a.x);
+        ma[1] = max(ma[1], a.y);
+        ma[2] = max(ma[2], a.z);
     }
 
     __device__ __host__ void update(const KdTreeNode &a)
     {
-        for(int i=0;i<3;i++)mi[i] = std::min(mi[i], a.mi[i]), ma[i] = std::max(ma[i], a.ma[i]);
+        for(int i=0;i<3;i++)mi[i] = min(mi[i], a.mi[i]), ma[i] = max(ma[i], a.ma[i]);
     }
 
     __device__ __host__ bool check_aabb(const Ray &ray) const
