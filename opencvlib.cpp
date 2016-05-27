@@ -8,7 +8,7 @@
 using namespace cv;
 
 
-void loadImage(unsigned char *&tex, int &sizex, int &sizey, const char file[], double times)
+void loadImage(unsigned char *&tex, int &sizex, int &sizey, const char file[], float times)
 {
     FILE *ft = fopen(file, "r");
     if(!ft)return;else fclose(ft);

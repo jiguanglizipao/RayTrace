@@ -23,7 +23,7 @@ static CuKdTree* cu_kdtrees;
 static KdTreeNode* cu_nodes;
 static Point3D *ans;
 
-__host__ inline double cu_norm(double x)
+__host__ inline float cu_norm(float x)
 {
     return x < 0 ? 0 : x > 1 ? 1 : x;
 }
@@ -157,23 +157,23 @@ void copyToDevice(std::vector<Sphere> &spheres, std::vector<Object> &objs, KdTre
     cudaDeviceSynchronize();
 }
 
-__device__ bool cu_nodesCheck(const KdTreeNode *nodes, int n, const Polygon *polys, const Ray &ray, int &nv, double &dis)
+__device__ bool cu_nodesCheck(const KdTreeNode *nodes, int n, const Polygon *polys, const Ray &ray, int &nv, float &dis)
 {
     dis=1e20;
     for(int i=0;i<n;i++)
     {
         int x=nodes[i].nv;
-        double t, u, v;
+        float t, u, v;
         if((t=polys[x].intersect(ray, u, v))<dis && t > eps)
             dis=t, nv=x;
     }
     return dis < 1e10;
 }
 
-__device__ bool cu_spheresCheck(const Sphere *spheres, int n, const Ray & r, int &id, double &t)
+__device__ bool cu_spheresCheck(const Sphere *spheres, int n, const Ray & r, int &id, float &t)
 {
     id = n;
-    double d;
+    float d;
     t = 1e20;
     for (int i=0;i<n;i++)
     {
@@ -186,12 +186,12 @@ __device__ bool cu_spheresCheck(const Sphere *spheres, int n, const Ray & r, int
     return t < 1e10;
 }
 
-__device__ bool cu_kdtreeCheck(const CuKdTree *tr, const KdTreeNode *nodes, const Polygon *polys, const Ray &ray, int &nv, double &dis)
+__device__ bool cu_kdtreeCheck(const CuKdTree *tr, const KdTreeNode *nodes, const Polygon *polys, const Ray &ray, int &nv, float &dis)
 {
     dis = 1e20;
-    double dis1=1e20;
+    float dis1=1e20;
     if(!tr->aabb.check_aabb(ray))return false;
-    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
+    float s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     int nv1, w=tr->w;
     bool t = false;
     cu_nodesCheck(nodes+tr->node, tr->num, polys, ray, nv, dis);
@@ -229,7 +229,7 @@ __device__ bool cu_kdtreeCheck(const CuKdTree *tr, const KdTreeNode *nodes, cons
 __device__ Point3D cu_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Polygon *polys, const Sphere *spheres, const int &numSphere,
                                const Ray &r, int depth, bool into, curandState_t *rands)
 {
-    double ts, to=1e20;
+    float ts, to=1e20;
     int ids, idv;
     bool fs, fo;
     fo = cu_kdtreeCheck(tr, nodes, polys, r, idv, to);
@@ -245,7 +245,7 @@ __device__ Point3D cu_radiance(const CuKdTree *tr, const KdTreeNode *nodes, cons
     }
     else
     {
-        double u, v;
+        float u, v;
         polys[idv].intersect(r, u, v);
         x = r.o + r.d * to;
         n = polys[idv].getn(x);
@@ -254,12 +254,12 @@ __device__ Point3D cu_radiance(const CuKdTree *tr, const KdTreeNode *nodes, cons
         type = polys[idv].type, lig = polys[idv].lig;
     }
 
-    double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
+    float p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
     if(++depth > 10)return lig;else if(depth > 5)f = f * (1 / p);
 
     if (type == DIFF)
     {
-        double r1 = 2 * M_PI * curand_uniform(rands), r2 = curand_uniform(rands), r2s = sqrt(r2);
+        float r1 = 2 * M_PI * curand_uniform(rands), r2 = curand_uniform(rands), r2s = sqrt(r2);
         Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
         Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
         return lig + f.mult(cu_radiance(tr, nodes, polys, spheres, numSphere, Ray(x-r.d*eps, d), depth, into, rands));
@@ -267,34 +267,16 @@ __device__ Point3D cu_radiance(const CuKdTree *tr, const KdTreeNode *nodes, cons
         return lig + f.mult(cu_radiance(tr, nodes, polys, spheres, numSphere, Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into, rands));
 
     Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
-    double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+    float nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
     if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
         return lig + f.mult(cu_radiance(tr, nodes, polys, spheres, numSphere, reflRay, depth, into, rands));
     Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
-    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
-    double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+    float a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+    float Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
     return lig + f.mult(depth > 2 ? (curand_uniform(rands) < P ? cu_radiance(tr, nodes, polys, spheres, numSphere, reflRay, depth, into, rands) * RP :
                                                                  cu_radiance(tr, nodes, polys, spheres, numSphere, Ray(x+r.d*eps, tdir), depth, !into, rands) * TP) :
                                     cu_radiance(tr, nodes, polys, spheres, numSphere, reflRay, depth, into, rands) * Re
                                     + cu_radiance(tr, nodes, polys, spheres, numSphere, Ray(x+r.d*eps, tdir), depth, !into, rands) * Tr);
-}
-
-__device__ double atomicAdd(double* address, double val)
-{
-    unsigned long long int* address_as_ull =
-            (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
-
-    do {
-        assumed = old;
-        old = atomicCAS(address_as_ull, assumed,
-                        __double_as_longlong(val +
-                                             __longlong_as_double(assumed)));
-
-        // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-    } while (assumed != old);
-
-    return __longlong_as_double(old);
 }
 
 __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Polygon *polys, const Sphere *spheres, int numSphere, int numPoly, 
@@ -305,8 +287,8 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
     int sx = (idx&1)!=0, sy = (idx&2)!=0;
     curandState_t rands;
     curand_init(seed+19950918*blockIdx.x+threadIdx.x, 0, 0, &rands);
-    double r1 = 2 * curand_uniform(&rands), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
-    double r2 = 2 * curand_uniform(&rands), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+    float r1 = 2 * curand_uniform(&rands), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+    float r2 = 2 * curand_uniform(&rands), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
     Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
     Ray r=Ray(cam.o + d * 140, d.norm());
 
@@ -317,7 +299,7 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
    
     for(int depth=0;depth<=MD;depth++)
     {
-        double ts, to=1e20;
+        float ts, to=1e20;
         int ids, idv;
         bool fs, fo;
         fo = cu_kdtreeCheck(tr, nodes, polys, r, idv, to);
@@ -334,7 +316,7 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
         }
         else
         {
-            double u, v;
+            float u, v;
             polys[idv].intersect(r, u, v);
             x = r.o + r.d * to;
             n = polys[idv].getn(x);
@@ -343,7 +325,7 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
             type = polys[idv].type, lig = polys[idv].lig;
         }
     
-        double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
+        float p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
         sum[depth] = lig;
         if(depth == MD)break;else if(depth > 5)f = f * (1 / p);
         sta[depth+1] = f;
@@ -352,7 +334,7 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
         {
         case DIFF:
         {
-            double r1 = 2 * M_PI * curand_uniform(&rands), r2 = curand_uniform(&rands), r2s = sqrt(r2);
+            float r1 = 2 * M_PI * curand_uniform(&rands), r2 = curand_uniform(&rands), r2s = sqrt(r2);
             Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
             Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
             r = Ray(x-r.d*eps, d);
@@ -366,15 +348,15 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
         default:
         {
             Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
-            double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+            float nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
             if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)
             {
                 r = reflRay;
                 break;
             }
             Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
-            double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
-            double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+            float a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+            float Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
             if(curand_uniform(&rands) < P)
             {
                 r = reflRay;
@@ -402,14 +384,17 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
 Point3D cuda_radiance(int x, int y, int sizex, int sizey, int samps, Point3D cx, Point3D cy, Ray cam)
 {
     if(!samps)return Point3D();
-    dim3 grids((4*samps+127)/128);
-    dim3 blocks(128);
+    dim3 grids((4*samps+64)/64);
+    dim3 blocks(64);
     cudaMemset(ans, 0, 4*sizeof(Point3D));
     k_radiance<<<grids, blocks>>>(cu_kdtrees, cu_nodes, cu_polys, cu_spheres, numSphere, numPoly, x, y, sizex, sizey, samps, cx, cy, cam, time(NULL), ans);
     cudaDeviceSynchronize();
     Point3D t[4], res;
     cudaMemcpy(t, ans, 4*sizeof(Point3D), cudaMemcpyDeviceToHost);
-    for(int i=0;i<4;i++)res = res + Point3D(cu_norm(t[i].x), cu_norm(t[i].y), cu_norm(t[i].z))*.25;
+    for(int i=0;i<4;i++)
+    {
+        res = res + Point3D(cu_norm(t[i].x), cu_norm(t[i].y), cu_norm(t[i].z))*.25;
+    }
     return res;
 }
 

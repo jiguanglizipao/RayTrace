@@ -25,7 +25,7 @@ vector<Object> objs;
 vector<Sphere> spheres;
 KdTree *kdtree;
 
-inline double norm(double x)
+inline float norm(float x)
 {
     return x < 0 ? 0 : x > 1 ? 1 : x;
 }
@@ -40,7 +40,7 @@ void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
 
 Point3D radiance(Ray r, int depth, bool into)
 {
-    double ts, to=1e20;
+    float ts, to=1e20;
     int ids, ido, idv;
     bool fs, fo;
     fo = kdtree->check(objs, r, ido, idv, to);
@@ -48,7 +48,7 @@ Point3D radiance(Ray r, int depth, bool into)
     if(!fo && !fs)return Point3D();
     Point3D x, n, nl, f, lig;
     RType type;
-//    if(fo)printf("%lf %lf %d %d\n", ts, to, ido, idv);
+//    if(fo)printf("%f %f %d %d\n", ts, to, ido, idv);
     if(ts < to || !fo)
     {
         const Sphere & obj = spheres[ids];
@@ -57,7 +57,7 @@ Point3D radiance(Ray r, int depth, bool into)
     }
     else
     {
-        double u, v;
+        float u, v;
         objs[ido].polys[idv].intersect(r, u, v);
         x = r.o + r.d * to;
         n = objs[ido].polys[idv].getn(x);
@@ -66,12 +66,12 @@ Point3D radiance(Ray r, int depth, bool into)
         type = objs[ido].type, lig = objs[ido].lig;
     }
 
-    double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
+    float p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
     if(++depth > 10)return lig;else if(depth > 5)f = f * (1 / p);
 
     if (type == DIFF)
     {
-        double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
+        float r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
         Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
         Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
         return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into));
@@ -79,20 +79,19 @@ Point3D radiance(Ray r, int depth, bool into)
         return lig + f.mult(radiance(Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into));
 
     Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
-    double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+    float nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
     if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
         return lig + f.mult(radiance(reflRay, depth, into));
     Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
-    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
-    double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
-    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP) :
-                                        radiance(reflRay, depth, into) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into) * Tr);
+    float a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+    float Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+    return lig + f.mult((drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP));
 }
 
 int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
-    double start = MPI_Wtime();
+    double start_time = MPI_Wtime();
     int myid, mpin;
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
@@ -107,12 +106,12 @@ int main(int argc, char *argv[])
         char buf[256], buf2[256];
         fscanf(fi, "%s", buf);
         Point3D loc, rotate;
-        double times;
-        fscanf(fi, "%lf", &times);
-        fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
-        fscanf(fi, "%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].lig.x, &objs[i].lig.y, &objs[i].lig.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].col.x, &objs[i].col.y, &objs[i].col.z);
+        float times;
+        fscanf(fi, "%f", &times);
+        fscanf(fi, "%f%f%f", &loc.x, &loc.y, &loc.z);
+        fscanf(fi, "%f%f%f", &rotate.x, &rotate.y, &rotate.z);
+        fscanf(fi, "%f%f%f", &objs[i].lig.x, &objs[i].lig.y, &objs[i].lig.z);
+        fscanf(fi, "%f%f%f", &objs[i].col.x, &objs[i].col.y, &objs[i].col.z);
         fscanf(fi, "%s", buf2);
         if(buf2[0] == 'D')objs[i].type = DIFF;
         else if(buf2[0] == 'S')objs[i].type = SPEC;
@@ -124,13 +123,13 @@ int main(int argc, char *argv[])
     fscanf(fi, "%d", &m);
     for(int i=0;i<m;i++)
     {
-        double rad;
+        float rad;
         Point3D pos, lig, col;
         RType type;
-        fscanf(fi, "%lf", &rad);
-        fscanf(fi, "%lf%lf%lf", &pos.x, &pos.y, &pos.z);
-        fscanf(fi, "%lf%lf%lf", &lig.x, &lig.y, &lig.z);
-        fscanf(fi, "%lf%lf%lf", &col.x, &col.y, &col.z);
+        fscanf(fi, "%f", &rad);
+        fscanf(fi, "%f%f%f", &pos.x, &pos.y, &pos.z);
+        fscanf(fi, "%f%f%f", &lig.x, &lig.y, &lig.z);
+        fscanf(fi, "%f%f%f", &col.x, &col.y, &col.z);
         char buf[256];
         fscanf(fi, "%s", buf);
         if(buf[0] == 'D')type = DIFF;
@@ -141,8 +140,8 @@ int main(int argc, char *argv[])
 
     fscanf(fi, "%d%d%d%d%d%d", &sizex, &sizey, &c_samps, &g_samps, &NUM_PER_NODE, &CU_STACK_SIZE);
     Point3D view, dir;
-    fscanf(fi, "%lf%lf%lf", &view.x, &view.y, &view.z);
-    fscanf(fi, "%lf%lf%lf", &dir.x, &dir.y, &dir.z);
+    fscanf(fi, "%f%f%f", &view.x, &view.y, &view.z);
+    fscanf(fi, "%f%f%f", &dir.x, &dir.y, &dir.z);
 
 
     //int sizex = 768, sizey = 1024, samps = 8;	// # samples
@@ -170,7 +169,9 @@ int main(int argc, char *argv[])
 
     printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    for(int x=0;x<sizex;x++)
+    int start = (myid%2 == 0)?0:(sizex/2), end = (myid%2 == 0)?(sizex/2):sizex;
+
+    for(int x=start;x<end;x++)
     {
         printf("myid=%d %s calc X=%d\n", myid, (dev==-1)?"CPU":"GPU", x);
         col.push_back(new Point3D[sizey]);
@@ -185,14 +186,14 @@ int main(int argc, char *argv[])
             else
             {
                 Point3D r;
-                for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++,r=Point3D())
+                for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++, r=Point3D(0, 0, 0))
                 {	// 2x2 subpixel cols
                     for (int s = 0; s < samps; s++)
                     {
-                        double r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
-                        double r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        float r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        float r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
                         Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
-                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true) * (1. / samps);
+                        r = r+radiance(Ray(cam.o + d * 140, d.norm()), 0, true) * (1.0/samps);
                     }	// Camera rays are pushed ^^^^^ forward to start in interior
                     col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
                 }
@@ -200,10 +201,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    for(int i=0;i<sizex;i++)
+    for(int i=start;i<end;i++)
     {
         req.push_back(MPI_Request());
-        MPI_Isend(col[i], 3*sizey, MPI_DOUBLE, 0, i, MPI_COMM_WORLD, &req.back());
+        MPI_Isend(col[i-start], 3*sizey, MPI_FLOAT, 0, i, MPI_COMM_WORLD, &req.back());
     }
     printf("myid=%d %s Finish\n", myid, (dev==-1)?"CPU":"GPU");
 
@@ -215,10 +216,11 @@ int main(int argc, char *argv[])
         for(int k=0;k<mpin;k++)
         {
             printf("Getdata id=%d\n", k);
-            for(int i=0;i<sizex;i++)
+            int start = (k%2 == 0)?0:(sizex/2), end = (k%2 == 0)?(sizex/2):sizex;
+            for(int i=start;i<end;i++)
             {
-                MPI_Recv(buff, 3*sizey, MPI_DOUBLE, k, i, MPI_COMM_WORLD, &status);
-                for(int j=0;j<sizey;j++)ans[i*sizey+j] = ans[i*sizey+j]+buff[j]*(1.0/mpin);
+                MPI_Recv(buff, 3*sizey, MPI_FLOAT, k, i, MPI_COMM_WORLD, &status);
+                for(int j=0;j<sizey;j++)ans[i*sizey+j] = ans[i*sizey+j]+buff[j]*(2.0/mpin);
             }
         }
         for(int i=0;i<sizex;i++)
@@ -228,7 +230,7 @@ int main(int argc, char *argv[])
         delete [] ans;
         printf("Save image to %s\n", "output.jpg");
         imwrite("output.jpg", image);
-        if(!myid)printf("%lfs\n", MPI_Wtime()-start);
+        if(!myid)printf("%lfs\n", MPI_Wtime()-start_time);
     }
     for(int i=0;i<req.size();i++)MPI_Wait(&req[i], &status);
     MPI_Finalize();

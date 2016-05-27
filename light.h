@@ -5,8 +5,8 @@
 
 struct Color
 {
-    double r, g, b;
-    Color(double _r = 0, double _g = 0, double _b = 0)
+    float r, g, b;
+    Color(float _r = 0, float _g = 0, float _b = 0)
         :r(_r), g(_g), b(_b)
     {
     }
@@ -14,8 +14,8 @@ struct Color
 
 Color operator* (const Point3D &x, const Color &y);
 Color operator+ (const Color &x, const Color &y);
-Color operator* (const double &k, const Color &x);
-double operator* (const Color &x, const Color &y);
+Color operator* (const float &k, const Color &x);
+float operator* (const Color &x, const Color &y);
 struct Light
 {
     Point3D loc;
