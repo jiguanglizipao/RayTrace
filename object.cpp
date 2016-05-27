@@ -6,7 +6,7 @@
 #include "opencvlib.h"
 using namespace std;
 
-bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D rotate)
+bool Object::readfile(std::string filename, double _times, Point3D _loc, Point3D rotate)
 {
     times = _times;
     loc = _loc;
@@ -76,7 +76,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
                         if(type == DIFF)
                         {
                             Point3D v;
-                            if(fscanf(fm, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                            if(fscanf(fm, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                             {
                             }
                             else
@@ -92,7 +92,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
                         if(type != DIFF)
                         {
                             Point3D v;
-                            if(fscanf(fm, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                            if(fscanf(fm, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                             {
                             }
                             else
@@ -133,7 +133,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             case '\0':			    /* vertex */
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                 {
                     v.x*=times, v.y*=times, v.z*=times;
                     v = t*v;
@@ -149,7 +149,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             case 'n':
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f%f",&v.x, &v.y, &v.z)==3)
+                if(fscanf(fp, "%lf%lf%lf",&v.x, &v.y, &v.z)==3)
                 {
                     v = t*v;
                     vn.push_back(v.norm());
@@ -164,7 +164,7 @@ bool Object::readfile(std::string filename, float _times, Point3D _loc, Point3D 
             case 't':
             {
                 Point3D v;
-                if(fscanf(fp, "%f%f",&v.x, &v.y)==2)
+                if(fscanf(fp, "%lf%lf",&v.x, &v.y)==2)
                 {
                 //    v.x*=times, v.y*=times, v.z*=times;
                     vt.push_back(v);

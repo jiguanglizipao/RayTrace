@@ -12,10 +12,10 @@ struct Object
     std::vector<unsigned char*> tex;
     std::vector<int> sizex, sizey;
     std::vector<std::string> name;
-    float times;
+    double times;
     Point3D loc, col, lig;
     RType type;
-    bool readfile(std::string fi = "", float _times = 1.0, Point3D _loc = Point3D(), Point3D rotate = Point3D());
+    bool readfile(std::string fi = "", double _times = 1.0, Point3D _loc = Point3D(), Point3D rotate = Point3D());
 };
 
 #endif

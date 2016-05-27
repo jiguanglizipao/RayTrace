@@ -10,12 +10,12 @@ Color operator+ (const Color &x, const Color &y)
     return Color(x.r+y.r, x.g+y.g, x.b+y.b);
 }
 
-Color operator* (const float &k, const Color &x)
+Color operator* (const double &k, const Color &x)
 {
     return Color(k*x.r, k*x.g, k*x.b);
 }
 
-float operator* (const Color &x, const Color &y)
+double operator* (const Color &x, const Color &y)
 {
     return x.r*y.r+x.g*y.g+x.b*y.b;
 }
