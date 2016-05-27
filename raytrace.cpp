@@ -67,7 +67,12 @@ Point3D radiance(Ray r, int depth, bool into)
     }
 
     float p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
-    if(++depth > 10)return lig;else if(depth > 5)f = f * (1 / p);
+    if (++depth > 5)
+        if (drand48() < p)
+            f = f * (1 / p);
+        else
+            return lig;
+
 
     if (type == DIFF)
     {
@@ -186,15 +191,15 @@ int main(int argc, char *argv[])
             else
             {
                 Point3D r;
-                for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++, r=Point3D(0, 0, 0))
-                {	// 2x2 subpixel cols
+                for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++,r=Point3D())
+                {   // 2x2 subpixel cols
                     for (int s = 0; s < samps; s++)
                     {
                         float r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
                         float r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
                         Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
-                        r = r+radiance(Ray(cam.o + d * 140, d.norm()), 0, true) * (1.0/samps);
-                    }	// Camera rays are pushed ^^^^^ forward to start in interior
+                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
+                    }   // Camera rays are pushed ^^^^^ forward to start in interior
                     col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
                 }
             }

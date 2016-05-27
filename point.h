@@ -4,7 +4,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-const float eps = 1e-4;
+const float eps = 1e-5;
 
 enum RType { DIFF, SPEC, REFR };	// material types, used in radiance()
 

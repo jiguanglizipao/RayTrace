@@ -327,7 +327,17 @@ __global__ void k_radiance(const CuKdTree *tr, const KdTreeNode *nodes, const Po
     
         float p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
         sum[depth] = lig;
-        if(depth == MD)break;else if(depth > 5)f = f * (1 / p);
+        if(depth == MD)break;
+        if(depth > 5)
+        {
+            if (p > eps)
+                f = f * (1 / p);
+            else
+            {
+                continue;
+            }
+        }
+
         sta[depth+1] = f;
     
         switch(type)
