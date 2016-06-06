@@ -90,7 +90,8 @@ Point3D radiance(Ray r, int depth, bool into)
     Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
     double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
     double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
-    return lig + f.mult((drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP));
+    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP) : 
+                        radiance(reflRay, depth, into) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into) * Tr);
 }
 
 int main(int argc, char *argv[])
@@ -101,6 +102,7 @@ int main(int argc, char *argv[])
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Comm_size(MPI_COMM_WORLD, &mpin);
+    srand48(time(NULL)+myid);
     FILE *fi = fopen("test.txt", "r");
 
     int n, m, sizex, sizey, c_samps, g_samps, NUM_PER_NODE, CU_STACK_SIZE;
@@ -169,24 +171,24 @@ int main(int argc, char *argv[])
         copyToDevice(spheres, objs, kdtree);
     }
 
-    vector<MPI_Request> req;
-    vector<Point3D*> col;
+    MPI_Request req;
+    Point3D* col;
 
     printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    int start = (myid%2 == 0)?0:(sizex/2), end = (myid%2 == 0)?(sizex/2):sizex;
+    int start = (myid%2 == 0)?0:(sizex/10*8), end = (myid%2 == 0)?(sizex/10*8):sizex;
+    col = new Point3D[sizey*(end-start)]();
 
     for(int x=start;x<end;x++)
     {
-        printf("myid=%d %s calc X=%d\n", myid, (dev==-1)?"CPU":"GPU", x);
-        col.push_back(new Point3D[sizey]);
+        printf("myid=%d %s calc X=%d time=%lf\n", myid, (dev==-1)?"CPU":"GPU", x, MPI_Wtime()-start_time);
         //#pragma omp parallel for schedule(dynamic, 1)
         for (int y = 0; y < sizey; y++)
         {	// Loop cols
             if(dev != -1)
             {
                 Point3D r = cuda_radiance(x, y, sizex, sizey, samps, cx, cy, cam);
-                col.back()[y] = col.back()[y] + r;
+                col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + r;
             }
             else
             {
@@ -200,46 +202,41 @@ int main(int argc, char *argv[])
                         Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
                         r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
                     }   // Camera rays are pushed ^^^^^ forward to start in interior
-                    col.back()[y] = col.back()[y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
+                    col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
                 }
             }
         }
     }
-
-    for(int i=start;i<end;i++)
-    {
-        req.push_back(MPI_Request());
-        MPI_Isend(col[i-start], 3*sizey, MPI_DOUBLE, 0, i, MPI_COMM_WORLD, &req.back());
-    }
+    
+    MPI_Isend(col, 3*sizey*(end-start), MPI_DOUBLE, 0, myid, MPI_COMM_WORLD, &req);
     printf("myid=%d %s Finish\n", myid, (dev==-1)?"CPU":"GPU");
 
     Mat image;
     if(!myid)
     {
         image.create(sizex, sizey, CV_8UC3);
-        Point3D *buff = new Point3D[sizey], *ans = new Point3D[sizex*sizey]();
+        Point3D *buff = new Point3D[sizex*sizey](), *ans = new Point3D[sizex*sizey]();
         for(int k=0;k<mpin;k++)
         {
             printf("Getdata id=%d\n", k);
-            int start = (k%2 == 0)?0:(sizex/2), end = (k%2 == 0)?(sizex/2):sizex;
+            int start = (k%2 == 0)?0:(sizex/10*8), end = (k%2 == 0)?(sizex/10*8):sizex;
+            MPI_Recv(buff, 3*sizey*(end-start), MPI_DOUBLE, k, k, MPI_COMM_WORLD, &status);
             for(int i=start;i<end;i++)
-            {
-                MPI_Recv(buff, 3*sizey, MPI_DOUBLE, k, i, MPI_COMM_WORLD, &status);
-                for(int j=0;j<sizey;j++)ans[i*sizey+j] = ans[i*sizey+j]+buff[j]*(2.0/mpin);
-            }
+                for(int j=0;j<sizey;j++)
+                    ans[i*sizey+j] = ans[i*sizey+j]+buff[(i-start)*sizey+j]*(2.0/mpin);
         }
         for(int i=0;i<sizex;i++)
             for(int j=0;j<sizey;j++)
                 drawPixel(image, i, j, ans[i*sizey+j]);
         delete [] buff;
         delete [] ans;
-        printf("Save image to %s\n", "output.jpg");
-        imwrite("output.jpg", image);
+        printf("Save image to %s\n", "output.bmp");
+        imwrite("output.bmp", image);
         if(!myid)printf("%lfs\n", MPI_Wtime()-start_time);
     }
-    for(int i=0;i<req.size();i++)MPI_Wait(&req[i], &status);
+    MPI_Wait(&req, &status);
     MPI_Finalize();
-    for(int i=0;i<req.size();i++)delete [] col[i];
+    delete [] col;
     if(!myid)
     {
         namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );

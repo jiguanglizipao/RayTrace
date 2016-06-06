@@ -66,7 +66,7 @@ struct Polygon
         for(int i=0;i<3;i++)t[i] = v[i]%v[(i+1)%3];
         for(int i=0;i<3;i++)s[i] = sqrt(t[i]*t[i]),sum+=s[i];
         sum*=0.1;
-        if(s[0]>sum || s[1]>sum || s[2]>sum)return nc;
+        if(s[0]>sum || s[1]>sum || s[2]>sum || sum > 250)return nc;
         for(int i=0;i<3;i++)ans = ans + n[i]*s[(i+1)%3];
         return ans*double(1.0/(s[0]+s[1]+s[2]));
     }
