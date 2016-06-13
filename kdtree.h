@@ -95,7 +95,7 @@ struct KdTreeTemp
 
 struct KdTree
 {
-    KdTree *l, *r;
+    KdTree *l, *r, *m;
     KdTreeNode aabb;
     int w, cu_num;
     double splitl, splitr, split;

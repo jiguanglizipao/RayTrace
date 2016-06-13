@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 
     printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    int start = (myid%2 == 0)?0:(sizex/10*8), end = (myid%2 == 0)?(sizex/10*8):sizex;
+    int start = (myid%2 == 0)?0:(sizex/10*7), end = (myid%2 == 0)?(sizex/10*7):sizex;
     col = new Point3D[sizey*(end-start)]();
 
     for(int x=start;x<end;x++)
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
         for(int k=0;k<mpin;k++)
         {
             printf("Getdata id=%d\n", k);
-            int start = (k%2 == 0)?0:(sizex/10*8), end = (k%2 == 0)?(sizex/10*8):sizex;
+            int start = (k%2 == 0)?0:(sizex/10*7), end = (k%2 == 0)?(sizex/10*7):sizex;
             MPI_Recv(buff, 3*sizey*(end-start), MPI_DOUBLE, k, k, MPI_COMM_WORLD, &status);
             for(int i=start;i<end;i++)
                 for(int j=0;j<sizey;j++)

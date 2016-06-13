@@ -4,7 +4,7 @@
 using namespace std;
 
 KdTree::KdTree(const vector<Object> &a, int s)
-    :l(NULL), r(NULL)
+    :l(NULL), r(NULL), m(NULL)
 {
     vector<KdTreeNode>pre;
     vector<KdTreeTemp>com[3];
@@ -23,17 +23,18 @@ KdTree::KdTree(const vector<Object> &a, int s)
 }
 
 KdTree::KdTree(const vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s)
-    :l(NULL), r(NULL)
+    :l(NULL), r(NULL), m(NULL)
 {
     create(a, com, s);
 }
 
 void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp> *com, int s)
 {
+    //printf("%d\n", pre.size());
     w = s;
     aabb.init();
     for(size_t i=0;i<pre.size();i++)aabb.update(pre[i]);
-    if(pre.size() < 4)
+    if(pre.size() <= 16)
     {
         node = pre;
         return;
@@ -91,6 +92,8 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
         else
             node.push_back(pre[i]);
     }
+    if(!node.empty())m = new KdTree(node, com, (w+1)%3);
+    node.clear();
     if(!vl.empty())l = new KdTree(vl, com, (w+1)%3);
     if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
 }
@@ -113,13 +116,14 @@ bool KdTree::check(const std::vector<Object> &objs, const Ray &ray, int &no, int
     dis = 1e20;
     double dis1=1e20;
     if(!aabb.check_aabb(ray))return false;
+    if(!m && !r && !l)return check_node(objs, ray, no, nv, dis);
     double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     int no1, nv1;
     bool t = false;
     if(s[w] < split)
     {
         if(l)t = l->check(objs, ray, no, nv, dis);
-        check_node(objs, ray, no1, nv1, dis1);
+        if(m)m->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         if(r && !t && v[w]>0)r->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
@@ -128,13 +132,13 @@ bool KdTree::check(const std::vector<Object> &objs, const Ray &ray, int &no, int
     if(s[w] > split)
     {
         if(r)t = r->check(objs, ray, no, nv, dis);
-        check_node(objs, ray, no1, nv1, dis1);
+        if(m)m->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         if(l && !t && v[w]<0)l->check(objs, ray, no1, nv1, dis1);
         if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         return dis < 1e10;
     }
-    check_node(objs, ray, no1, nv1, dis1);
+    if(m)m->check(objs, ray, no1, nv1, dis1);
     if(v[w] < 0 && l)l->check(objs, ray, no, nv, dis);
     if(v[w] > 0 && r)r->check(objs, ray, no, nv, dis);
     if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
