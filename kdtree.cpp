@@ -19,22 +19,22 @@ KdTree::KdTree(const vector<Object> &a, int s)
         }
     }
     for(int i=0;i<3;i++)sort(com[i].begin(), com[i].end());
-    create(pre, com, s);
+    create(pre, com, s, 0x7fffffff, 0x7fffffff);
 }
 
-KdTree::KdTree(const vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s)
+KdTree::KdTree(const vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s, int n1, int n2)
     :l(NULL), r(NULL), m(NULL)
 {
-    create(a, com, s);
+    create(a, com, s, n1, n2);
 }
 
-void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp> *com, int s)
+void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp> *com, int s, int n1, int n2)
 {
     //printf("%d\n", pre.size());
     w = s;
     aabb.init();
     for(size_t i=0;i<pre.size();i++)aabb.update(pre[i]);
-    if(pre.size() <= 16)
+    if(pre.size() <= 8 || (n1==n2 && n1 == pre.size()))
     {
         node = pre;
         return;
@@ -92,10 +92,10 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
         else
             node.push_back(pre[i]);
     }
-    if(!node.empty())m = new KdTree(node, com, (w+1)%3);
+    if(!node.empty())m = new KdTree(node, com, (w+1)%3, n2, pre.size());
     node.clear();
-    if(!vl.empty())l = new KdTree(vl, com, (w+1)%3);
-    if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
+    if(!vl.empty())l = new KdTree(vl, com, (w+1)%3, n2, pre.size());
+    if(!vr.empty())r = new KdTree(vr, com, (w+1)%3, n2, pre.size());
 }
 
 bool KdTree::check_node(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis)

@@ -100,8 +100,20 @@ int main(int argc, char *argv[])
     double start_time = MPI_Wtime();
     int myid, mpin;
     MPI_Status status;
+    MPI_Request req;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Comm_size(MPI_COMM_WORLD, &mpin);
+    MPI_Isend(&myid, 1, MPI_INT, 0, myid, MPI_COMM_WORLD, &req);
+    if(!myid)
+    {
+        for(int k=0;k<mpin;k++)
+        {
+            printf("Checking id=%d\n", k);
+            int tmp;
+            MPI_Recv(&tmp, 1, MPI_INT, k, k, MPI_COMM_WORLD, &status);
+        }
+    }
+    MPI_Wait(&req, &status);
     srand48(time(NULL)+myid);
     FILE *fi = fopen("test.txt", "r");
 
@@ -147,13 +159,16 @@ int main(int argc, char *argv[])
 
     fscanf(fi, "%d%d%d%d%d%d", &sizex, &sizey, &c_samps, &g_samps, &NUM_PER_NODE, &CU_STACK_SIZE);
     Point3D view, dir;
+    double deep, aper;
     fscanf(fi, "%lf%lf%lf", &view.x, &view.y, &view.z);
     fscanf(fi, "%lf%lf%lf", &dir.x, &dir.y, &dir.z);
+    fscanf(fi, "%lf%lf", &deep, &aper);
 
 
     //int sizex = 768, sizey = 1024, samps = 8;	// # samples
     Ray cam(view, dir.norm());	// cam pos, dir
     Point3D cy = Point3D(sizey * .5035 / sizex, 0, 0), cx = (cy % cam.d).norm() * -.5035;
+    Point3D cy2 = Point3D(sizey * .5235 / sizex, 0, 0), cx2 = (cy % cam.d).norm() * -.5235;
 
     int dev_num = check_device();
     int nodeid = myid%NUM_PER_NODE;
@@ -171,12 +186,11 @@ int main(int argc, char *argv[])
         copyToDevice(spheres, objs, kdtree);
     }
 
-    MPI_Request req;
     Point3D* col;
 
     printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    int start = (myid%2 == 0)?0:(sizex/10*7), end = (myid%2 == 0)?(sizex/10*7):sizex;
+    int start = (myid%2 == 0)?0:(sizex/10*7.5), end = (myid%2 == 0)?(sizex/10*7.5):sizex;
     col = new Point3D[sizey*(end-start)]();
 
     for(int x=start;x<end;x++)
@@ -200,7 +214,13 @@ int main(int argc, char *argv[])
                         double r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
                         double r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
                         Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
-                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
+                        Point3D Q = cam.o+d*deep, S0 = cam.o+d*140;
+                        r1 = 2*aper * drand48(), dx = r1 < aper ? sqrt(r1) - aper : aper - sqrt(2*aper - r1);
+                        r2 = 2*aper * drand48(), dy = r2 < aper ? sqrt(r2) - aper : aper - sqrt(2*aper - r2);
+                        Point3D P = cx2 * dx + cy2 * dy + cam.o;
+                        Point3D D = Q-P, S = (P-cam.o)*((deep-140)/deep)+S0;
+                        r = r + radiance(Ray(S, D.norm()), 0, true)*(1.0/samps);
+                        //r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
                     }   // Camera rays are pushed ^^^^^ forward to start in interior
                     col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
                 }
@@ -219,7 +239,7 @@ int main(int argc, char *argv[])
         for(int k=0;k<mpin;k++)
         {
             printf("Getdata id=%d\n", k);
-            int start = (k%2 == 0)?0:(sizex/10*7), end = (k%2 == 0)?(sizex/10*7):sizex;
+            int start = (k%2 == 0)?0:(sizex/10*7.5), end = (k%2 == 0)?(sizex/10*7.5):sizex;
             MPI_Recv(buff, 3*sizey*(end-start), MPI_DOUBLE, k, k, MPI_COMM_WORLD, &status);
             for(int i=start;i<end;i++)
                 for(int j=0;j<sizey;j++)

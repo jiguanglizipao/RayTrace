@@ -105,8 +105,8 @@ struct KdTree
     bool check(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis);
     bool check_node(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis);
     KdTree(const std::vector<Object> &a, int s);
-    KdTree(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
-    void create(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s);
+    KdTree(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s, int n1, int n2);
+    void create(const std::vector<KdTreeNode> &a, const std::vector<KdTreeTemp> *com, int s, int n1, int n2);
 
     ~KdTree()
     {
