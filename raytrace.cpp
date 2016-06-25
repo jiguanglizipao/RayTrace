@@ -96,6 +96,10 @@ Point3D radiance(Ray r, int depth, bool into)
 
 int main(int argc, char *argv[])
 {
+    if(argc < 3)
+    {
+        printf("Usage: %s inputFile outputFile\n", argv[0]);
+    }
     MPI_Init(&argc, &argv);
     double start_time = MPI_Wtime();
     int myid, mpin;
@@ -115,7 +119,7 @@ int main(int argc, char *argv[])
     }
     MPI_Wait(&req, &status);
     srand48(time(NULL)+myid);
-    FILE *fi = fopen("test.txt", "r");
+    FILE *fi = fopen(argv[1], "r");
 
     int n, m, sizex, sizey, c_samps, g_samps, NUM_PER_NODE, CU_STACK_SIZE;
     fscanf(fi, "%d", &n);
@@ -190,7 +194,7 @@ int main(int argc, char *argv[])
 
     printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    int start = (myid%2 == 0)?0:(sizex/10*7.5), end = (myid%2 == 0)?(sizex/10*7.5):sizex;
+    int start = (myid%2 == 0)?0:(sizex/10*6), end = (myid%2 == 0)?(sizex/10*6):sizex;
     col = new Point3D[sizey*(end-start)]();
 
     for(int x=start;x<end;x++)
@@ -215,8 +219,9 @@ int main(int argc, char *argv[])
                         double r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
                         Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
                         Point3D Q = cam.o+d*deep, S0 = cam.o+d*140;
-                        r1 = 2*aper * drand48(), dx = r1 < aper ? sqrt(r1) - aper : aper - sqrt(2*aper - r1);
-                        r2 = 2*aper * drand48(), dy = r2 < aper ? sqrt(r2) - aper : aper - sqrt(2*aper - r2);
+                        r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        dx*=aper, dy*=aper;
                         Point3D P = cx2 * dx + cy2 * dy + cam.o;
                         Point3D D = Q-P, S = (P-cam.o)*((deep-140)/deep)+S0;
                         r = r + radiance(Ray(S, D.norm()), 0, true)*(1.0/samps);
@@ -239,7 +244,7 @@ int main(int argc, char *argv[])
         for(int k=0;k<mpin;k++)
         {
             printf("Getdata id=%d\n", k);
-            int start = (k%2 == 0)?0:(sizex/10*7.5), end = (k%2 == 0)?(sizex/10*7.5):sizex;
+            int start = (k%2 == 0)?0:(sizex/10*6), end = (k%2 == 0)?(sizex/10*6):sizex;
             MPI_Recv(buff, 3*sizey*(end-start), MPI_DOUBLE, k, k, MPI_COMM_WORLD, &status);
             for(int i=start;i<end;i++)
                 for(int j=0;j<sizey;j++)
@@ -250,8 +255,8 @@ int main(int argc, char *argv[])
                 drawPixel(image, i, j, ans[i*sizey+j]);
         delete [] buff;
         delete [] ans;
-        printf("Save image to %s\n", "output.bmp");
-        imwrite("output.bmp", image);
+        printf("Save image to %s\n", argv[2]);
+        imwrite(argv[2], image);
         if(!myid)printf("%lfs\n", MPI_Wtime()-start_time);
     }
     MPI_Wait(&req, &status);
