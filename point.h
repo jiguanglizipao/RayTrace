@@ -6,7 +6,7 @@
 
 const double eps = 1e-5;
 
-enum RType { DIFF, SPEC, REFR };	// material types, used in radiance()
+enum RType { DIFF, SPEC, REFR, BDR };	// material types, used in radiance()
 
 struct Point3D
 {

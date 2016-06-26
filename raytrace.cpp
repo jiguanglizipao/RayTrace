@@ -38,7 +38,7 @@ void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
     image.at<cv::Vec3b>(x,y)[0] = int(pow(ans.z, 1 / 2.2) * 255 + .5);
 }
 
-Point3D radiance(Ray r, int depth, bool into)
+Point3D radiance(Ray r, int depth, bool into, double los)
 {
     double ts, to=1e20;
     int ids, ido, idv;
@@ -48,7 +48,6 @@ Point3D radiance(Ray r, int depth, bool into)
     if(!fo && !fs)return Point3D();
     Point3D x, n, nl, f, lig;
     RType type;
-//    if(fo)printf("%lf %lf %d %d\n", ts, to, ido, idv);
     if(ts < to || !fo)
     {
         const Sphere & obj = spheres[ids];
@@ -65,9 +64,10 @@ Point3D radiance(Ray r, int depth, bool into)
         f = objs[ido].polys[idv].getcol(u, v);
         type = objs[ido].type, lig = objs[ido].lig;
     }
+    lig = lig*los;
 
     double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
-    if (++depth > 5)
+    if (++depth > 20)
         if (drand48() < p)
             f = f * (1 / p);
         else
@@ -79,19 +79,74 @@ Point3D radiance(Ray r, int depth, bool into)
         double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
         Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
         Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
-        return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into));
+        return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into, los));
     } else if (type == SPEC)	// Ideal SPECULAR reflection
-        return lig + f.mult(radiance(Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into));
-
-    Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
-    double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
-    if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
-        return lig + f.mult(radiance(reflRay, depth, into));
-    Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
-    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
-    double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
-    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP) : 
-                        radiance(reflRay, depth, into) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into) * Tr);
+        return lig + f.mult(radiance(Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into, los));
+    else if (type == REFR)
+    {
+        Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
+        double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+        if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+            return lig + f.mult(radiance(reflRay, depth, into, los));
+        Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+        double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+        double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+        return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into, los) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into, los) * TP) :
+                            radiance(reflRay, depth, into, los) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into, los) * Tr);
+    }
+    else if(into)
+    {
+        double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
+        Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
+        Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+        Ray reflRay(x-r.d*eps, d);	// Ideal dielectric REFRACTION
+        double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+        if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+            return lig + f.mult(radiance(reflRay, depth, into, los));
+        Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+        double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+        double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+        return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into, los) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into, los*0.8) * TP) :
+                            radiance(reflRay, depth, into, los) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into, los*0.8) * Tr);
+    }
+    else if(los > 0.01)
+    {
+        double dis=drand48();
+        if(dis > ts && dis > to)
+        {
+            Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
+            double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+            if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+                return lig + f.mult(radiance(reflRay, depth, into, los*0.5));
+            Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+            double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+            double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+            return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into, los*0.8) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into, los) * TP) :
+                                radiance(reflRay, depth, into, los*0.8) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into, los) * Tr);
+        }
+        else
+        {
+            n = Point3D(drand48(),drand48(),drand48()).norm();nl = ((n*r.d) < 0 ? n : n * -1);
+            double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
+            Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
+            Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+            if(drand48() < 0.5) d=d*-1;
+            Ray reflRay(x+r.d*dis, d);
+            return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into, los*0.8));
+        }
+    }
+    else
+    {
+        Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));
+        double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+        if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+            return lig + f.mult(radiance(reflRay, depth, into, los));
+        Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+        double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+        double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+        return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into, los) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into, los*0.8) * TP) :
+                            radiance(reflRay, depth, into, los) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into, los*0.8) * Tr);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -157,7 +212,8 @@ int main(int argc, char *argv[])
         fscanf(fi, "%s", buf);
         if(buf[0] == 'D')type = DIFF;
         else if(buf[0] == 'S')type = SPEC;
-        else type = REFR;
+        else if(buf[0] == 'R')type = REFR;
+        else type = BDR;
         spheres.push_back(Sphere(rad, pos, lig, col, type));
     }
 
@@ -224,7 +280,7 @@ int main(int argc, char *argv[])
                         dx*=aper, dy*=aper;
                         Point3D P = cx2 * dx + cy2 * dy + cam.o;
                         Point3D D = Q-P, S = (P-cam.o)*((deep-140)/deep)+S0;
-                        r = r + radiance(Ray(S, D.norm()), 0, true)*(1.0/samps);
+                        r = r + radiance(Ray(S, D.norm()), 0, true, 1)*(1.0/samps);
                         //r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
                     }   // Camera rays are pushed ^^^^^ forward to start in interior
                     col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;

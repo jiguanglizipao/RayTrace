@@ -1,2 +1,1 @@
-# RayTrace
-Parallel Ray Trace using CUDA &amp; MPI
+# Surface simplification using quadric error metrics，SIGGRAPH 97
