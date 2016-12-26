@@ -1,9 +1,3 @@
-#include <cv.h>
-#if CV_VERSION_MAJOR == 3
-    #include <opencv2/highgui.hpp>
-#else
-    #include <opencv/highgui.h>
-#endif
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -11,206 +5,124 @@
 #include <algorithm>
 #include <cmath>
 #include <mpi.h>
+#include <cv.hpp>
+#if CV_VERSION_MAJOR == 3
+#include <opencv2/highgui.hpp>
+#else
+#include <opencv/highgui.h>
+#endif
 #include "point.h"
+#include "sphere.h"
 #include "polygon.h"
 #include "object.h"
 #include "kdtree.h"
-#include "light.h"
+#include "cuda_raytrace.h"
 
 using namespace std;
 using namespace cv;
 
 vector<Object> objs;
-vector<Light> lights;
+vector<Sphere> spheres;
 KdTree *kdtree;
-int lnum;
 
-void drawPixel(cv::Mat &image, int x, int y, Color color) {
-    Color ans = color;
-    if(ans.b > 1 || ans.r > 1 || ans.g > 1)
-        printf("%lf %lf %lf\n", ans.r, ans.g, ans.b);
-    ans.r = ans.r>1?1:ans.r;
-    ans.g = ans.g>1?1:ans.g;
-    ans.b = ans.b>1?1:ans.b;
-    image.at<cv::Vec3b>(x,y)[2] = int(ans.r*255);
-    image.at<cv::Vec3b>(x,y)[1] = int(ans.g*255);
-    image.at<cv::Vec3b>(x,y)[0] = int(ans.b*255);
-}
-
-bool CheckAll(Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
+inline double norm(double x)
 {
-    dis=1.1e10;
-    double raydis = sqrt(ray*ray);
-    for(size_t i=0;i<objs.size();i++)
-    {
-        for(size_t j=0;j<objs[i].polys.size();j++)
-        {
-            double k = -(objs[i].polys[j].d+objs[i].polys[j].n*view)/(objs[i].polys[j].n*ray);
-            if(k < eps)continue;
-            Point3D tmp = view+k*ray;
-            if(objs[i].polys[j].checkInside(tmp) == Polygon::inside)
-                if(k*raydis < dis)dis=k*raydis, no=i, nv=j, p=tmp;
-        }
-    }
-    return dis < 1e10;
+    return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
-Color Ilocal(Point3D view, Point3D pos, int no, int nv, bool f)
+void drawPixel(cv::Mat &image, int x, int y, Point3D color) {
+    Point3D ans = color;
+    ans.x=norm(ans.x), ans.y=norm(ans.y), ans.z=norm(ans.z);
+    image.at<cv::Vec3b>(x,y)[2] = int(pow(ans.x, 1 / 2.2) * 255 + .5);
+    image.at<cv::Vec3b>(x,y)[1] = int(pow(ans.y, 1 / 2.2) * 255 + .5);
+    image.at<cv::Vec3b>(x,y)[0] = int(pow(ans.z, 1 / 2.2) * 255 + .5);
+}
+
+Point3D radiance(Ray r, int depth, bool into)
 {
-    int lnumt = f?lnum:lnum;
-    Color ans(0.0, 0.0, 0.0);
-    for(size_t i=0;i<lights.size();i++)
+    double ts, to=1e20;
+    int ids, ido, idv;
+    bool fs, fo;
+    fo = kdtree->check(objs, r, ido, idv, to);
+    fs = sphere_intersect(&spheres[0], spheres.size(), r, ids, ts);
+    if(!fo && !fs)return Point3D();
+    Point3D x, n, nl, f, lig;
+    RType type;
+//    if(fo)printf("%lf %lf %d %d\n", ts, to, ido, idv);
+    if(ts < to || !fo)
     {
-        int no1, nv1, num=0;
-        Point3D p, L, V=view-pos, tmp(0.0, 0.0, 0.0), n, sum(0,0,0);
-        for(int j=0;j<lnumt;j++)
-        {
-            double x=1e-6*(rand()%1000000), y=1e-6*(rand()%1000000), z=1e-6*(rand()%1000000), dis;
-            x=lights[i].mi[0]+x*(lights[i].ma[0]-lights[i].mi[0]);
-            y=lights[i].mi[1]+y*(lights[i].ma[1]-lights[i].mi[1]);
-            z=lights[i].mi[2]+z*(lights[i].ma[2]-lights[i].mi[2]);
-            L=Point3D(x,y,z)-pos;
-            kdtree->check(objs, pos, L, no1, nv1, p, dis);
-            if(dis < sqrt(L*L))continue;
-            sum = sum + Point3D(x,y,z);num++;
-        }
-        //CheckAll(pos, L, no1, nv1, p, dis);
-        if(!num)continue;
-        L = 1.0/num*sum;
-        if((L-pos)*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
-        if((objs[no].polys[nv].n*view+objs[no].polys[nv].d)*(objs[no].polys[nv].n*L+objs[no].polys[nv].d) > 0)
-        {
-            L = L-pos;
-            tmp = tmp + 1.0/sqrt(L*L)*L*n*objs[no].Kds;
-            tmp = tmp + pow(1/sqrt((L+V)*(L+V))*(L+V)*n, 30)*objs[no].Ks;
-        }
-        ans = ans+1.0*num/lnumt*tmp*lights[i].col;
+        const Sphere & obj = spheres[ids];
+        x = r.o + r.d * ts, n = (x - obj.pos).norm(), nl = ((n*r.d) < 0 ? n : n * -1);
+        f = obj.col, type = obj.type, lig = obj.lig;
     }
-    return ans;
+    else
+    {
+        double u, v;
+        objs[ido].polys[idv].intersect(r, u, v);
+        x = r.o + r.d * to;
+        n = objs[ido].polys[idv].getn(x);
+        nl = ((n*r.d) < 0 ? n : n * -1);
+        f = objs[ido].polys[idv].getcol(u, v);
+        type = objs[ido].type, lig = objs[ido].lig;
+    }
+
+    double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;	// max refl
+    if (++depth > 5)
+        if (drand48() < p)
+            f = f * (1 / p);
+        else
+            return lig;
+
+
+    if (type == DIFF)
+    {
+        double r1 = 2 * M_PI * drand48(), r2 = drand48(), r2s = sqrt(r2);
+        Point3D w = nl, u = ((fabs(w.x) > .1 ? Point3D(0, 1, 0) : Point3D(1, 0, 0)) % w).norm(), v = w % u;
+        Point3D d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+        return lig + f.mult(radiance(Ray(x-r.d*eps, d), depth, into));
+    } else if (type == SPEC)	// Ideal SPECULAR reflection
+        return lig + f.mult(radiance(Ray(x-r.d*eps, r.d - n * 2 * (n*r.d)), depth, into));
+
+    Ray reflRay(x-r.d*eps, r.d - n * 2 * (n*r.d));	// Ideal dielectric REFRACTION
+    double nc = 1, nt = 1.7, nnt = into ? nc / nt : nt / nc, ddn = r.d*nl, cos2t;
+    if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0)	// Total internal reflection
+        return lig + f.mult(radiance(reflRay, depth, into));
+    Point3D tdir = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b),   c = 1 - (into ? -ddn : (tdir*n));
+    double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+    return lig + f.mult(depth > 2 ? (drand48() < P ? radiance(reflRay, depth, into) * RP : radiance(Ray(x+r.d*eps, tdir), depth, !into) * TP) : 
+                        radiance(reflRay, depth, into) * Re + radiance(Ray(x+r.d*eps, tdir), depth, !into) * Tr);
 }
 
-Color Ilocal(Point3D view, Point3D pos, int no, int nv, bool in, bool f)
-{
-    int lnumt = f?lnum:lnum;
-    Color ans(0.0, 0.0, 0.0);
-    for(size_t i=0;i<lights.size();i++)
-    {
-        int no1, nv1, num=0;
-        Point3D p, L, V=view-pos, tmp(0.0, 0.0, 0.0), n, sum(0,0,0);
-        if(L*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
-        double dis, n1=10, n2=17;
-        if(!in)swap(n1, n2);
-        for(int j=0;j<lnumt;j++)
-        {
-            double x=1e-6*(rand()%1000000), y=1e-6*(rand()%1000000), z=1e-6*(rand()%1000000), dis;
-            x=lights[i].mi[0]+x*(lights[i].ma[0]-lights[i].mi[0]);
-            y=lights[i].mi[1]+y*(lights[i].ma[1]-lights[i].mi[1]);
-            z=lights[i].mi[2]+z*(lights[i].ma[2]-lights[i].mi[2]);
-            L=Point3D(x,y,z)-pos;
-            kdtree->check(objs, pos, L, no1, nv1, p, dis);
-            if(dis < sqrt(L*L))continue;
-            sum = sum + Point3D(x,y,z);num++;
-        }
-        //CheckAll(pos, L, no1, nv1, p, dis);
-        L = 1.0/num*sum;
-        V = (1.0/sqrt(V*V))*V;
-
-        if((objs[no].polys[nv].n*view+objs[no].polys[nv].d)*(objs[no].polys[nv].n*L+objs[no].polys[nv].d) < 0)
-        {
-            L = L-pos;
-            if(!in && asin(n2/n1) < acos(V*n))continue;
-            tmp = tmp - 1.0/sqrt(L*L)*L*n*objs[no].Kdt;
-            tmp = tmp + pow((n1-n2)/fabs(n1-n2)/sqrt((n2*L+n1*V)*(n2*L+n1*V))*(n2*L+n1*V)*n, 30)*objs[no].Kt;
-        }
-        ans = ans+1.0*num/lnumt*tmp*lights[i].col;
-    }
-    return ans;
-}
-
-
-Color RayTracing(Point3D view, Point3D ray, Point3D weight, bool in, int snum, bool f)
-{
-    const double MinWeight = 1e-3;
-    double dis=1e10;
-    int no=-1, nv=-1;
-    Point3D p, n;
-    if(!kdtree->check(objs, view, ray, no, nv, p, dis))return Color(0.0, 0.0, 0.0);
-    //if(!CheckAll(view, ray, no, nv, p, dis))return Color(0.0, 0.0, 0.0);
-    for(int i=0;i<lights.size();i++)if(lights[i].check_aabb(view, ray) < 1e10)return weight*lights[i].col;
-    if(weight*weight < MinWeight*MinWeight) return Color(0.0, 0.0, 0.0);
-    Point3D V = view-p;V = (1.0/sqrt(V*V))*V;
-    if(V*objs[no].polys[nv].n < 0)n=-1*objs[no].polys[nv].n;else n=objs[no].polys[nv].n;
-
-    Point3D R = 2*(V*n)*n-V;
-    Point3D delta = eps/sqrt(ray*ray)*ray;
-    Color ans = Ilocal(view, p-delta, no, nv, !f)+Ilocal(view, p+delta, no, nv, in, !f);
-
-    if(objs[no].Ks1*objs[no].Ks1 > eps)ans = ans + RayTracing(p-delta, R, 0.6*weight*objs[no].Ks1, in, snum, f);
-    if(objs[no].Ks2*objs[no].Ks2 > eps && !f)
-    {
-        for(int i=0;i<snum;i++)
-        {
-            Point3D K(1e-6*(rand()%2000000)-1, 1e-6*(rand()%2000000)-1, 1e-6*(rand()%2000000)-1);
-            if((K*objs[no].polys[nv].n)*(R*objs[no].polys[nv].n) < -eps)K = -1.0*K;
-            ans = ans + .1/MinWeight/snum*objs[no].Ks2*RayTracing(p-delta, K, 10*MinWeight*weight, in, snum, true);
-        }
-    }
-    double cos1 = n*V, np = in?(17.0/10.0):(10.0/17.0);
-    if(1-1/(np*np)*(1-cos1*cos1) < eps)return weight*ans;// = ans + 0.5*Rcolor;
-    double cos2 = sqrt(1-(1/(np*np)*(1-cos1*cos1)));
-    Point3D T = -1/np*V+(cos1/np-cos2)*n;
-    if(objs[no].Kt1*objs[no].Kt1 > eps)ans = ans + RayTracing(p+delta, T, 0.4*weight*objs[no].Kt1, !in, snum, f);
-    if(objs[no].Kt2*objs[no].Kt2 > eps && !f)
-    {
-        for(int i=0;i<snum;i++)
-        {
-            Point3D K(1e-6*(rand()%2000000)-1, 1e-6*(rand()%2000000)-1, 1e-6*(rand()%2000000)-1);
-            if((K*objs[no].polys[nv].n)*(T*objs[no].polys[nv].n) < -eps)K = -1.0*K;
-            ans = ans + .2/MinWeight/snum*objs[no].Kt2*RayTracing(p+delta, K, 10*MinWeight*weight, !in, snum, true);
-        }
-    }
-    return weight*ans;
-}
-
-int main( int argc, char** argv )
+int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
-    double start = MPI_Wtime();
+    double start_time = MPI_Wtime();
     int myid, mpin;
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Comm_size(MPI_COMM_WORLD, &mpin);
-    //if(argc < 2)
-    //{
-    //    if(!myid)printf("Usage %s inputFile\n", argv[0]);
-    //    return 0;
-    //}
-
+    srand48(time(NULL)+myid);
     FILE *fi = fopen("test.txt", "r");
 
-    Mat image;
-    int n, m, sizex, sizey, vnum, snum;
-    Point3D view, sc_tmp;
-
+    int n, m, sizex, sizey, c_samps, g_samps, NUM_PER_NODE, CU_STACK_SIZE;
     fscanf(fi, "%d", &n);
     for(int i=0;i<n;i++)
     {
         objs.push_back(Object());
-        char buf[256];
+        char buf[256], buf2[256];
         fscanf(fi, "%s", buf);
         Point3D loc, rotate;
         double times;
         fscanf(fi, "%lf", &times);
         fscanf(fi, "%lf%lf%lf", &loc.x, &loc.y, &loc.z);
         fscanf(fi, "%lf%lf%lf", &rotate.x, &rotate.y, &rotate.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kds.x, &objs[i].Kds.y, &objs[i].Kds.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks.x, &objs[i].Ks.y, &objs[i].Ks.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks1.x, &objs[i].Ks1.y, &objs[i].Ks1.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Ks2.x, &objs[i].Ks2.y, &objs[i].Ks2.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kdt.x, &objs[i].Kdt.y, &objs[i].Kdt.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt.x, &objs[i].Kt.y, &objs[i].Kt.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt1.x, &objs[i].Kt1.y, &objs[i].Kt1.z);
-        fscanf(fi, "%lf%lf%lf", &objs[i].Kt2.x, &objs[i].Kt2.y, &objs[i].Kt2.z);
+        fscanf(fi, "%lf%lf%lf", &objs[i].lig.x, &objs[i].lig.y, &objs[i].lig.z);
+        fscanf(fi, "%lf%lf%lf", &objs[i].col.x, &objs[i].col.y, &objs[i].col.z);
+        fscanf(fi, "%s", buf2);
+        if(buf2[0] == 'D')objs[i].type = DIFF;
+        else if(buf2[0] == 'S')objs[i].type = SPEC;
+        else objs[i].type = REFR;
         if(!objs[i].readfile(string(buf), times, loc, rotate)) return 0;
     }
     kdtree = new KdTree(objs, 0);
@@ -218,96 +130,113 @@ int main( int argc, char** argv )
     fscanf(fi, "%d", &m);
     for(int i=0;i<m;i++)
     {
-        Color col;
-        fscanf(fi, "%lf%lf%lf", &col.r, &col.g, &col.b);
-        lights.push_back(Light(col));
-        fscanf(fi, "%lf%lf%lf", &lights.back().mi[0], &lights.back().mi[1], &lights.back().mi[2]);
-        fscanf(fi, "%lf%lf%lf", &lights.back().ma[0], &lights.back().ma[1], &lights.back().ma[2]);
+        double rad;
+        Point3D pos, lig, col;
+        RType type;
+        fscanf(fi, "%lf", &rad);
+        fscanf(fi, "%lf%lf%lf", &pos.x, &pos.y, &pos.z);
+        fscanf(fi, "%lf%lf%lf", &lig.x, &lig.y, &lig.z);
+        fscanf(fi, "%lf%lf%lf", &col.x, &col.y, &col.z);
+        char buf[256];
+        fscanf(fi, "%s", buf);
+        if(buf[0] == 'D')type = DIFF;
+        else if(buf[0] == 'S')type = SPEC;
+        else type = REFR;
+        spheres.push_back(Sphere(rad, pos, lig, col, type));
     }
 
+    fscanf(fi, "%d%d%d%d%d%d", &sizex, &sizey, &c_samps, &g_samps, &NUM_PER_NODE, &CU_STACK_SIZE);
+    Point3D view, dir;
     fscanf(fi, "%lf%lf%lf", &view.x, &view.y, &view.z);
-    vector<Point3D> sc;
-    for(int i=0;i<3;i++)
+    fscanf(fi, "%lf%lf%lf", &dir.x, &dir.y, &dir.z);
+
+
+    //int sizex = 768, sizey = 1024, samps = 8;	// # samples
+    Ray cam(view, dir.norm());	// cam pos, dir
+    Point3D cy = Point3D(sizey * .5035 / sizex, 0, 0), cx = (cy % cam.d).norm() * -.5035;
+
+    int dev_num = check_device();
+    int nodeid = myid%NUM_PER_NODE;
+    int dev = -1, samps=c_samps;
+    //if(nodeid < dev_num)dev=nodeid, samps=g_samps;
+    if(dev != -1)
     {
-        fscanf(fi, "%lf%lf%lf", &sc_tmp.x, &sc_tmp.y, &sc_tmp.z);
-        sc.push_back(sc_tmp);
+        print_device_info(myid, dev);
+        cudaSetDevice(dev);
+    #if CUDART_VERSION >= 4000
+        cudaDeviceSetLimit(cudaLimitStackSize, CU_STACK_SIZE);
+    #else
+        cudaThreadSetLimit(cudaLimitStackSize, CU_STACK_SIZE);
+    #endif
+        copyToDevice(spheres, objs, kdtree);
     }
-    fscanf(fi, "%d%d%d%d%d", &sizex, &sizey, &vnum, &snum, &lnum);vnum=1;
-    fclose(fi);
-    Polygon screen(sc);
-    Point2D Vy_2=(1.0/sizey)*screen.points2d[1], Vx_2=(1.0/sizex)*(screen.points2d[2]-screen.points2d[1]);
-    Point3D Vx(Vx_2.x, Vx_2.y, 0), Vy(Vy_2.x, Vy_2.y, 0);
 
-    int *spl = new int[mpin+1], per=sizex/mpin, res=sizex-mpin*per;
-    memset(spl, 0, sizeof(spl));
-    for(int i=mpin-1;i>=0;i--,res--)spl[i+1]=per+(res>0);
-    for(int i=1;i<=mpin;i++)spl[i]=spl[i-1]+spl[i];
+    MPI_Request req;
+    Point3D* col;
 
-    vector<MPI_Request*> req;
-    vector<Color*> col;
+    printf("myid=%d %s samps=%d\n", myid, (dev==-1)?"CPU":"GPU", samps);
 
-    printf("myid=%d start=%d end=%d\n", myid, spl[myid], spl[myid+1]);
+    int start = (myid%2 == 0)?0:(sizex/10*8), end = (myid%2 == 0)?(sizex/10*8):sizex;
+    col = new Point3D[sizey*(end-start)]();
 
-    for(int i=spl[myid];i<spl[myid+1];i++)
+    for(int x=start;x<end;x++)
     {
-        printf("%d\n", i);
-        col.push_back(new Color[sizey]);
-        req.push_back(new MPI_Request[3*sizey]);
-        #pragma omp parallel for schedule(dynamic)
-        for(int j=0;j<sizey;j++)
-        {
-            col.back()[j]=Color(0,0,0);
-            for(int k=0;k<vnum;k++)
+        printf("myid=%d %s calc X=%d time=%lf\n", myid, (dev==-1)?"CPU":"GPU", x, MPI_Wtime()-start_time);
+        //#pragma omp parallel for schedule(dynamic, 1)
+        for (int y = 0; y < sizey; y++)
+        {	// Loop cols
+            if(dev != -1)
             {
-                double dx=double(rand()%100000)/100000-0.5, dy=double(rand()%100000)/100000-0.5;
-                dx=0, dy=0;
-                Point3D ray = screen.rotate_r*((i+dx)*Vx+(j+dy)*Vy) - view;
-                col.back()[j] = col.back()[j] + RayTracing(view, ray, Point3D(1,1,1), false, snum, false);
+                Point3D r = cuda_radiance(x, y, sizex, sizey, samps, cx, cy, cam);
+                col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + r;
             }
-        }
-    }
-    for(int i=spl[myid];i<spl[myid+1];i++)
-    {
-        for(int j=0;j<sizey;j++)
-        {
-            MPI_Isend(&col[i-spl[myid]][j].r, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+0, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+0]);
-            MPI_Isend(&col[i-spl[myid]][j].g, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+1, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+1]);
-            MPI_Isend(&col[i-spl[myid]][j].b, 1, MPI_DOUBLE, 0, (i*sizey+j)*3+2, MPI_COMM_WORLD, &req[i-spl[myid]][3*j+2]);
-        }
-    }
-    printf("myid=%d Finish\n", myid);
-    if(!myid)
-    {
-        image.create(sizex, sizey, CV_8UC3);
-        for(int k=0;k<mpin;k++)
-        {
-            printf("Getdata id=%d\n", k);
-            for(int i=spl[k];i<spl[k+1];i++)
+            else
             {
-                for(int j=0;j<sizey;j++)
-                {
-                    Color tmp(0,0,0);
-                    MPI_Recv(&(tmp.r), 1, MPI_DOUBLE, k, (i*sizey+j)*3+0, MPI_COMM_WORLD, &status);
-                    MPI_Recv(&(tmp.g), 1, MPI_DOUBLE, k, (i*sizey+j)*3+1, MPI_COMM_WORLD, &status);
-                    MPI_Recv(&(tmp.b), 1, MPI_DOUBLE, k, (i*sizey+j)*3+2, MPI_COMM_WORLD, &status);
-                    drawPixel(image, i, j, 1.0/vnum*tmp);
+                Point3D r;
+                for(int sx=0;sx<2;sx++)for(int sy=0;sy<2;sy++,r=Point3D())
+                {   // 2x2 subpixel cols
+                    for (int s = 0; s < samps; s++)
+                    {
+                        double r1 = 2 * drand48(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        double r2 = 2 * drand48(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        Point3D d = cx * (((sx + .5 + dx) / 2 + x) / sizex - .5) + cy * (((sy + .5 + dy) / 2 + y) / sizey - .5) + cam.d;
+                        r = r + radiance(Ray(cam.o + d * 140, d.norm()), 0, true)*(1.0/samps);
+                    }   // Camera rays are pushed ^^^^^ forward to start in interior
+                    col[(x-start)*sizey+y] = col[(x-start)*sizey+y] + Point3D(norm(r.x), norm(r.y), norm(r.z)) * .25;
                 }
             }
         }
-        printf("Save image to %s\n", "output.jpg");
-        imwrite("output.jpg", image);
-        if(!myid)printf("%lfs\n", MPI_Wtime()-start);
     }
-    for(int i=0;i<req.size();i++)
-        for(int j=0;j<3*sizey;j++)
-            MPI_Wait(&req[i][j], &status);
-     MPI_Finalize(); 
-    for(int i=0;i<req.size();i++)
+    
+    MPI_Isend(col, 3*sizey*(end-start), MPI_DOUBLE, 0, myid, MPI_COMM_WORLD, &req);
+    printf("myid=%d %s Finish\n", myid, (dev==-1)?"CPU":"GPU");
+
+    Mat image;
+    if(!myid)
     {
-       delete [] req[i];
-       delete [] col[i];
+        image.create(sizex, sizey, CV_8UC3);
+        Point3D *buff = new Point3D[sizex*sizey](), *ans = new Point3D[sizex*sizey]();
+        for(int k=0;k<mpin;k++)
+        {
+            printf("Getdata id=%d\n", k);
+            int start = (k%2 == 0)?0:(sizex/10*8), end = (k%2 == 0)?(sizex/10*8):sizex;
+            MPI_Recv(buff, 3*sizey*(end-start), MPI_DOUBLE, k, k, MPI_COMM_WORLD, &status);
+            for(int i=start;i<end;i++)
+                for(int j=0;j<sizey;j++)
+                    ans[i*sizey+j] = ans[i*sizey+j]+buff[(i-start)*sizey+j]*(2.0/mpin);
+        }
+        for(int i=0;i<sizex;i++)
+            for(int j=0;j<sizey;j++)
+                drawPixel(image, i, j, ans[i*sizey+j]);
+        delete [] buff;
+        delete [] ans;
+        printf("Save image to %s\n", "output.bmp");
+        imwrite("output.bmp", image);
+        if(!myid)printf("%lfs\n", MPI_Wtime()-start_time);
     }
-    delete [] spl;
+    MPI_Wait(&req, &status);
+    MPI_Finalize();
+    delete [] col;
     if(!myid)
     {
         namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
@@ -315,6 +244,6 @@ int main( int argc, char** argv )
         waitKey(0);
     }
     return 0;
-}
 
+}
 

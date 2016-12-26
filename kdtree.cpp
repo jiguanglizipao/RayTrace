@@ -1,28 +1,7 @@
 #include "kdtree.h"
+#include <cstdio>
 #include <algorithm>
 using namespace std;
-
-bool KdTreeNode::check_aabb(Point3D view, Point3D ray)
-{
-    double s[3]={view.x, view.y, view.z}, v[3]={ray.x, ray.y, ray.z};
-    Point3D pos;
-    if (mi[0]<s[0]+eps && s[0]<ma[0]+eps && mi[1]<s[1]+eps && s[1]<ma[1]+eps && mi[2]<s[2]+eps && s[2]<ma[2]+eps)return true;
-    for(int i=0;i<3;i++)
-    {
-        if (fabs(v[i]) > eps)
-        {
-            double t = ((v[i]>0?mi[i]:ma[i]) - s[i]) / v[i];
-            if (t > eps)
-            {
-                pos = view + t * ray;
-                double p[3]={pos.x, pos.y, pos.z};
-                if (mi[(i+1)%3]<p[(i+1)%3]+eps && p[(i+1)%3]<ma[(i+1)%3]+eps && mi[(i+2)%3]<p[(i+2)%3]+eps && p[(i+2)%3]<ma[(i+2)%3]+eps)return true;
-            }
-        }
-    }
-    return false;
-}
-
 
 KdTree::KdTree(const vector<Object> &a, int s)
     :l(NULL), r(NULL)
@@ -54,7 +33,7 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     w = s;
     aabb.init();
     for(size_t i=0;i<pre.size();i++)aabb.update(pre[i]);
-    if(pre.size() < 10)
+    if(pre.size() < 4)
     {
         node = pre;
         return;
@@ -116,50 +95,48 @@ void KdTree::create(const vector<KdTreeNode> &pre, const std::vector<KdTreeTemp>
     if(!vr.empty())r = new KdTree(vr, com, (w+1)%3);
 }
 
-bool KdTree::check_node(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
+bool KdTree::check_node(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis)
 {
-    dis=1.1e10;
-    double raydis = sqrt(ray*ray);
+    dis=1e20;
     for(size_t l=0;l<node.size();l++)
     {
         int i=node[l].no, j=node[l].nv;
-        double k = -(objs[i].polys[j].d+objs[i].polys[j].n*view)/(objs[i].polys[j].n*ray);
-        if(k < eps)continue;
-        Point3D tmp = view+k*ray;
-        if(objs[i].polys[j].checkInside(tmp) == Polygon::inside)
-            if(k*raydis < dis)dis=k*raydis, no=i, nv=j, p=tmp;
+        double t, u, v;
+        if((t=objs[i].polys[j].intersect(ray, u, v))<dis && t > eps)
+            dis=t, no=i, nv=j;
     }
     return dis < 1e10;
 }
 
-bool KdTree::check(const std::vector<Object> &objs, Point3D view, Point3D ray, int &no, int &nv, Point3D &p, double &dis)
+bool KdTree::check(const std::vector<Object> &objs, const Ray &ray, int &no, int &nv, double &dis)
 {
-    if(!aabb.check_aabb(view, ray))return false;
-    double s[3]={view.x, view.y, view.z}, v[3]={ray.x, ray.y, ray.z};
+    dis = 1e20;
+    double dis1=1e20;
+    if(!aabb.check_aabb(ray))return false;
+    double s[3]={ray.o.x, ray.o.y, ray.o.z}, v[3]={ray.d.x, ray.d.y, ray.d.z};
     int no1, nv1;
-    double dis1=1.1e10;dis = 1.1e10;
-    Point3D p1;
+    bool t = false;
     if(s[w] < split)
     {
-        if(l)l->check(objs, view, ray, no, nv, p, dis);
-        check_node(objs, view, ray, no1, nv1, p1, dis1);
-        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
-        if(v[w] > 0 && r)r->check(objs, view, ray, no1, nv1, p1, dis1);
-        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
+        if(l)t = l->check(objs, ray, no, nv, dis);
+        check_node(objs, ray, no1, nv1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
+        if(r && !t && v[w]>0)r->check(objs, ray, no1, nv1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         return dis < 1e10;
     }
     if(s[w] > split)
     {
-        if(r)r->check(objs, view, ray, no, nv, p, dis);
-        check_node(objs, view, ray, no1, nv1, p1, dis1);
-        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
-        if(v[w] < 0 && l)l->check(objs, view, ray, no1, nv1, p1, dis1);
-        if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
+        if(r)t = r->check(objs, ray, no, nv, dis);
+        check_node(objs, ray, no1, nv1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
+        if(l && !t && v[w]<0)l->check(objs, ray, no1, nv1, dis1);
+        if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
         return dis < 1e10;
     }
-    check_node(objs, view, ray, no1, nv1, p1, dis1);
-    if(v[w] < 0 && l)l->check(objs, view, ray, no, nv, p, dis);
-    if(v[w] > 0 && r)r->check(objs, view, ray, no, nv, p, dis);
-    if(dis1 < dis)no=no1, nv=nv1, p=p1, dis=dis1;
+    check_node(objs, ray, no1, nv1, dis1);
+    if(v[w] < 0 && l)l->check(objs, ray, no, nv, dis);
+    if(v[w] > 0 && r)r->check(objs, ray, no, nv, dis);
+    if(dis1 < dis)no=no1, nv=nv1, dis=dis1;
     return dis < 1e10;
 }

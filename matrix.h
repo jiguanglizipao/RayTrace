@@ -7,7 +7,7 @@
 struct Matrix
 {
     double a[4][4], n, m;
-    Matrix(int _n=4, int _m=4)
+    Matrix(int _n, int _m)
         :n(_n), m(_m)
     {
         for(int i=0;i<n;i++)for(int j=0;j<n;j++)a[i][j]=0;

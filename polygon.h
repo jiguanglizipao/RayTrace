@@ -1,50 +1,92 @@
 #ifndef POLYGON_H
 #define POLYGON_H
 
-#include "point.h"
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cuda_runtime.h>
+#include "point.h"
 #include "matrix.h"
 
 struct Polygon
 {
-    std::vector<Point2D> points2d;
-    std::vector<Point3D> points3d;
-    Matrix rotate, rotate_r;
-    Point3D n;
-    double d;
-    enum State
+    Point3D points3d[3], n[3], ts[3], lig, col, nc;
+    unsigned char *tex;
+    int sizex, sizey;
+    RType type;
+    __host__ Polygon(const Point3D points3d_[], const Point3D n_[], const Point3D ts_[], Point3D lig_, Point3D col_, RType type_, unsigned char *tex_, int sizex_, int sizey_)
+        :lig(lig_), col(col_), type(type_), tex(tex_), sizex(sizex_), sizey(sizey_)
     {
-        outside, inside
-    };
-
-    Polygon(const std::vector<Point3D> &_points3d)
-        :points3d(_points3d)
-    {
+        for(int i=0;i<3;i++)points3d[i] = points3d_[i];
+        for(int i=0;i<3;i++)n[i] = n_[i]-points3d_[i];
+        for(int i=0;i<3;i++)ts[i] = ts_[i];
         const Point3D &a = points3d[0], &b=points3d[1], &c=points3d[2];
-        n = Point3D((b.y*c.z+c.y*a.z+a.y*b.z-b.y*a.z-a.y*c.z-c.y*b.z),
+        nc = Point3D((b.y*c.z+c.y*a.z+a.y*b.z-b.y*a.z-a.y*c.z-c.y*b.z),
                     (a.x*c.z+b.x*a.z+c.x*b.z-c.x*a.z-b.x*c.z-a.x*b.z),
                     (a.x*b.y+b.x*c.y+c.x*a.y-c.x*b.y-b.x*a.y-a.x*c.y));
-        d = -(a.x*b.y*c.z+b.x*c.y*a.z+c.x*a.y*b.z-c.x*b.y*a.z-b.x*a.y*c.z-a.x*c.y*b.z);
-
-        double l = sqrt(n*n);
-        n=(1/l)*n, d/=l;
-
-        rotate = Matrix::Ry(sqrt(n.y*n.y+n.z*n.z)/sqrt(n*n), -n.x/sqrt(n*n))*Matrix::Rx(n.z/sqrt(n.y*n.y+n.z*n.z), n.y/sqrt(n.z*n.z+n.y*n.y))*Matrix::T(-a.x, -a.y, -a.z);
-        rotate_r = Matrix::T(a.x, a.y, a.z)*Matrix::Rx(n.z/sqrt(n.y*n.y+n.z*n.z), -n.y/sqrt(n.z*n.z+n.y*n.y))*Matrix::Ry(sqrt(n.y*n.y+n.z*n.z)/sqrt(n*n), n.x/sqrt(n*n));
-
-        points2d.clear();
-        for(std::size_t i=0;i<points3d.size();i++)
-        {
-            Point3D t = rotate*points3d[i];
-            points2d.push_back(Point2D(t.x, t.y));
-        }
+        nc.norm();
     }
 
-    bool SameSide(Point3D a, Point3D b, Point3D c, Point3D p) const;
+    __device__ __host__ unsigned char GetImageData(unsigned char *image, int sizex, int sizey, double x, double y, int c) const
+    {
+    //    int t = (int(x*sizex+0.5)%sizex)*3*sizey+3*(int(y*sizey+0.5)%sizey)+c;
+    //    printf("%d %d\n", t, 3*sizex*sizey);
+        return image[(int(x*sizex+0.5)%sizex)*3*sizey+3*(int(y*sizey+0.5)%sizey)+c];
+    }
 
-    State checkInside(Point3D pos) const;
+    __device__ __host__ double intersect(const Ray & r, double &u, double &v) const
+    {
+        Point3D E1 = points3d[1] - points3d[0];
+        Point3D E2 = points3d[2] - points3d[0];
+        Point3D P = r.d%E2;
+        double det = E1*P, t;
+        Point3D T;
+        if(det > 0)
+            T = r.o - points3d[0];
+        else
+            T = points3d[0] - r.o, det = -det;
+        if(det < eps)return 1e20;
+        u = T*P;
+        if( u < 0 || u > det )return 1e20;
+        Point3D Q = T%E1;
+        v = r.d*Q;
+        if(v < 0 || u + v > det )return 1e20;
+        t = E2*Q;
+        double fInvDet = 1.0 / det;
+        t *= fInvDet;
+        u *= fInvDet;
+        v *= fInvDet;
+        return t;
+    }
+    __device__ __host__ Point3D getn(Point3D x) const
+    {
+        Point3D v[3], t[3], ans;
+        double s[3], sum=0;
+        for(int i=0;i<3;i++)v[i] = (points3d[i]-x).norm();
+        for(int i=0;i<3;i++)t[i] = v[i]%v[(i+1)%3];
+        for(int i=0;i<3;i++)s[i] = sqrt(t[i]*t[i]),sum+=s[i];
+        sum*=0.1;
+        if(s[0]>sum || s[1]>sum || s[2]>sum || sum > 250)return nc;
+        for(int i=0;i<3;i++)ans = ans + n[i]*s[(i+1)%3];
+        return ans*double(1.0/(s[0]+s[1]+s[2]));
+    }
+    __device__ __host__ Point3D getcol(double u, double v) const
+    {
+        if(!tex)return col;
+        Point3D s = (ts[1]-ts[0])*u+(ts[2]-ts[0])*v+ts[0];
+        Point3D ans;
+    //    if(s.x > 2 || s.y > 2)printf("%lf %lf\n", s.x, s.y);
+        ans.x = GetImageData(tex, sizex, sizey, s.x, s.y, 2);
+        ans.y = GetImageData(tex, sizex, sizey, s.x, s.y, 1);
+        ans.z = GetImageData(tex, sizex, sizey, s.x, s.y, 0);
+    //    printf("%lf %lf %lf\n", ans.x, ans.y, ans.z);
+
+    //    ans.x = tex->at<cv::Vec3b>(s.x,s.y)[2];
+    //    ans.y = tex->at<cv::Vec3b>(s.x,s.y)[1];
+    //    ans.z = tex->at<cv::Vec3b>(s.x,s.y)[0];
+        ans.x = pow(ans.x/256, 2.2);ans.y = pow(ans.y/256, 2.2);ans.z = pow(ans.z/256, 2.2);
+        return ans;
+    }
 
 };
 
